@@ -9,10 +9,17 @@ import (
 	"github.com/olusolaa/github-monitor/pkg/logger"
 )
 
-func InitializeRepository(repoService services.RepositoryService, publisher queue.MessagePublisher, owner, repo string) {
+func InitializeRepository(githubService services.GitHubService, repoService services.RepositoryService, publisher queue.MessagePublisher, owner, repo string) {
 	ctx := context.Background()
 
-	repository, err := repoService.FetchRepositoryInfo(ctx, repo, owner)
+	repository, err := githubService.FetchRepository(ctx, repo, owner)
+	if err != nil {
+		logger.LogError(err)
+		return
+	}
+	repository.Owner = owner
+
+	err = repoService.UpsertRepository(ctx, repository)
 	if err != nil {
 		logger.LogError(err)
 		return

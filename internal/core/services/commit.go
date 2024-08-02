@@ -11,38 +11,21 @@ import (
 )
 
 type CommitService interface {
-	FetchCommits(ctx context.Context, repoID int64, startTime, endTime string) ([]domain.Commit, error)
 	SaveCommits(ctx context.Context, commits []domain.Commit) error
 	GetLatestCommit(ctx context.Context, repoID int64) (*domain.Commit, error)
-	GetCommitsByRepository(ctx context.Context, repoID int64, page, pageSize int) ([]domain.Commit, *pagination.Pagination, error)
+	GetCommitsByRepositoryName(ctx context.Context, owner, name string, page, pageSize int) ([]domain.Commit, *pagination.Pagination, error)
 	ResetCollection(ctx context.Context, repoID int64, startTime time.Time) error
 	GetTopCommitAuthors(ctx context.Context, repoID int64, limit int) ([]domain.CommitAuthor, error)
 }
 
 type commitService struct {
-	ghService         GitHubService
+	gitHubService     GitHubService
 	repositoryService RepositoryService
 	commitRepo        *postgresdb.CommitRepository
 }
 
-func NewCommitService(ghService GitHubService, repositoryService RepositoryService, commitRepo *postgresdb.CommitRepository) CommitService {
-	return &commitService{ghService: ghService, repositoryService: repositoryService, commitRepo: commitRepo}
-}
-
-// FetchCommits fetches commits for a given repository and time range from GitHub
-func (s *commitService) FetchCommits(ctx context.Context, repoID int64, startTime, endTime string) ([]domain.Commit, error) {
-	owner, repoName, err := s.repositoryService.GetOwnerAndRepoName(ctx, repoID)
-	if err != nil {
-		logger.LogError(err)
-		return nil, err
-	}
-
-	commits, err := s.ghService.FetchCommits(ctx, owner, repoName, startTime, endTime, repoID)
-	if err != nil {
-		logger.LogError(err)
-		return nil, err
-	}
-	return commits, nil
+func NewCommitService(gitHubService GitHubService, repositoryService RepositoryService, commitRepo *postgresdb.CommitRepository) CommitService {
+	return &commitService{gitHubService: gitHubService, repositoryService: repositoryService, commitRepo: commitRepo}
 }
 
 // SaveCommits saves the provided commits into the repository
@@ -64,8 +47,8 @@ func (s *commitService) GetLatestCommit(ctx context.Context, repoID int64) (*dom
 	return latestCommit, nil
 }
 
-func (s *commitService) GetCommitsByRepository(ctx context.Context, repoID int64, page, pageSize int) ([]domain.Commit, *pagination.Pagination, error) {
-	commits, totalItems, err := s.commitRepo.GetCommitsByRepositoryID(ctx, repoID, page, pageSize)
+func (s *commitService) GetCommitsByRepositoryName(ctx context.Context, owner, name string, page, pageSize int) ([]domain.Commit, *pagination.Pagination, error) {
+	commits, totalItems, err := s.commitRepo.GetCommitsByRepositoryName(ctx, owner, name, page, pageSize)
 	if err != nil {
 		logger.LogError(err)
 		return nil, nil, err
@@ -96,7 +79,14 @@ func (s *commitService) ResetCollection(ctx context.Context, repoID int64, start
 
 	// Fetch new commits from the start time
 	startTimeStr := startTime.Format(time.RFC3339)
-	commits, err := s.FetchCommits(ctx, repoID, startTimeStr, "")
+	owner, name, err := s.repositoryService.GetOwnerAndRepoName(ctx, repoID)
+	if err != nil {
+		logger.LogError(err)
+		tx.Rollback()
+		return err
+	}
+
+	commits, err := s.gitHubService.FetchCommits(ctx, owner, name, startTimeStr, "", repoID)
 	if err != nil {
 		logger.LogError(err)
 		tx.Rollback()

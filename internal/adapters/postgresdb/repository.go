@@ -7,6 +7,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/olusolaa/github-monitor/internal/core/domain"
 	"github.com/olusolaa/github-monitor/pkg/logger"
+	"time"
 )
 
 // RepositoryRepository manages the database operations for repository data.
@@ -85,4 +86,18 @@ func (r *RepositoryRepository) GetOwnerAndRepoName(ctx context.Context, repoID i
 		return "", "", err
 	}
 	return owner, name, nil
+}
+
+// Update updates the repository record in the database.
+func (r *RepositoryRepository) Update(ctx context.Context, repo *domain.Repository) error {
+	query := `UPDATE repositories SET
+        forks_count = $1,
+        stargazers_count = $2,
+        open_issues_count = $3,
+        watchers_count = $4,
+        updated_at = $5
+        WHERE id = $6`
+
+	_, err := r.db.ExecContext(ctx, query, repo.ForksCount, repo.StargazersCount, repo.OpenIssuesCount, repo.WatchersCount, time.Now(), repo.ID)
+	return err
 }

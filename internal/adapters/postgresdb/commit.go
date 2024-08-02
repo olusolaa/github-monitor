@@ -3,6 +3,7 @@ package postgresdb
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"github.com/jmoiron/sqlx"
 	"github.com/olusolaa/github-monitor/internal/core/domain"
 	"github.com/olusolaa/github-monitor/pkg/logger"
@@ -42,7 +43,7 @@ func (c *CommitRepository) GetLatestCommitByRepositoryID(ctx context.Context, re
     `
 	var commit domain.Commit
 	if err := c.db.GetContext(ctx, &commit, query, repoID); err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
 		logger.LogError(err)
@@ -51,25 +52,29 @@ func (c *CommitRepository) GetLatestCommitByRepositoryID(ctx context.Context, re
 	return &commit, nil
 }
 
-func (c *CommitRepository) GetCommitsByRepositoryID(ctx context.Context, repoID int64, page, pageSize int) ([]domain.Commit, int, error) {
+func (c *CommitRepository) GetCommitsByRepositoryName(ctx context.Context, owner, name string, page, pageSize int) ([]domain.Commit, int, error) {
 	query := `
-        SELECT id, repository_id, hash, message, author_name, author_email, commit_date, url
+        SELECT commits.id, commits.repository_id, commits.hash, commits.message, commits.author_name, 
+               commits.author_email, commits.commit_date, commits.url
         FROM commits
-        WHERE repository_id = $1
-        ORDER BY commit_date DESC
+        JOIN repositories ON commits.repository_id = repositories.id
+        WHERE repositories.name = $1 AND repositories.owner = $2
+        ORDER BY commits.commit_date DESC
     `
 	paginatedQuery := pagination.ApplyToQuery(query, page, pageSize)
 
 	var commits []domain.Commit
-	if err := c.db.SelectContext(ctx, &commits, paginatedQuery, repoID); err != nil {
+	if err := c.db.SelectContext(ctx, &commits, paginatedQuery, name, owner); err != nil {
 		logger.LogError(err)
 		return nil, 0, err
 	}
 
 	// Count total items for pagination
 	var totalItems int
-	countQuery := `SELECT COUNT(*) FROM commits WHERE repository_id = $1`
-	if err := c.db.GetContext(ctx, &totalItems, countQuery, repoID); err != nil {
+	countQuery := `SELECT COUNT(*) FROM commits
+                   JOIN repositories ON commits.repository_id = repositories.id
+                   WHERE repositories.name = $1 AND repositories.owner = $2`
+	if err := c.db.GetContext(ctx, &totalItems, countQuery, name, owner); err != nil {
 		logger.LogError(err)
 		return nil, 0, err
 	}

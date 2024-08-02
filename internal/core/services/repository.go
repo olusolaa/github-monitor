@@ -8,8 +8,10 @@ import (
 )
 
 type RepositoryService interface {
-	FetchRepositoryInfo(ctx context.Context, name, owner string) (*domain.Repository, error)
+	GetRepository(ctx context.Context, name, owner string) (*domain.Repository, error)
 	GetOwnerAndRepoName(ctx context.Context, repoID int64) (string, string, error)
+	UpsertRepository(ctx context.Context, repository *domain.Repository) error
+	//GetRepoFromDB(ctx context.Context, repoID int64) (*domain.Repository, error)
 }
 
 type repositoryService struct {
@@ -21,7 +23,8 @@ func NewRepositoryService(ghService GitHubService, repoRepo *postgresdb.Reposito
 	return &repositoryService{ghService: ghService, repoRepo: repoRepo}
 }
 
-func (s *repositoryService) FetchRepositoryInfo(ctx context.Context, repoName, owner string) (*domain.Repository, error) {
+// GetRepositoryInfo fetches repository information either from the database or GitHub API.
+func (s *repositoryService) GetRepository(ctx context.Context, repoName, owner string) (*domain.Repository, error) {
 
 	repository, err := s.repoRepo.FindByNameAndOwner(ctx, repoName, owner)
 	if err != nil {
@@ -29,26 +32,15 @@ func (s *repositoryService) FetchRepositoryInfo(ctx context.Context, repoName, o
 		return nil, err
 	}
 
-	// This seems incorrect. The repository should be fetched from GitHub if it doesn't exist in the database
-	if repository != nil {
-		return repository, nil
-	}
+	return repository, nil
+}
 
-	// Fetch latest repository data from GitHub
-	repository, err = s.ghService.FetchRepository(ctx, owner, repoName)
-	if err != nil {
-		logger.LogError(err)
-		return nil, err
-	}
-
-	repository.Owner = owner
-
+func (s *repositoryService) UpsertRepository(ctx context.Context, repository *domain.Repository) error {
 	if err := s.repoRepo.Upsert(ctx, repository); err != nil {
 		logger.LogError(err)
-		return nil, err
+		return err
 	}
-
-	return repository, nil
+	return nil
 }
 
 func (s *repositoryService) GetOwnerAndRepoName(ctx context.Context, repoID int64) (string, string, error) {

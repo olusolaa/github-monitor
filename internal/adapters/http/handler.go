@@ -16,7 +16,7 @@ func RegisterRoutes(r chi.Router, repoService services.RepositoryService, commit
 	//r.Use(APIKeyAuthMiddleware)
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/repos/{owner}/{repo}", getRepository(repoService))
-		r.Get("/repos/{repo_id}/commits", getCommits(commitService))
+		r.Get("/repos/{owner}/{name}/commits", getCommits(commitService))
 		r.Get("/repos/{repo_id}/top-authors", getTopCommitAuthors(commitService))
 		r.Post("/repos/{repo_id}/reset-collection", resetCollection(commitService))
 	})
@@ -27,7 +27,7 @@ func getRepository(repoService services.RepositoryService) http.HandlerFunc {
 		owner := chi.URLParam(r, "owner")
 		repo := chi.URLParam(r, "repo")
 
-		repository, err := repoService.FetchRepositoryInfo(r.Context(), repo, owner)
+		repository, err := repoService.GetRepository(r.Context(), repo, owner)
 		if err != nil {
 			errors.HandleError(w, err)
 			return
@@ -40,12 +40,8 @@ func getRepository(repoService services.RepositoryService) http.HandlerFunc {
 
 func getCommits(commitService services.CommitService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		repoID := chi.URLParam(r, "repo_id")
-		repoIDInt, err := strconv.ParseInt(repoID, 10, 64)
-		if err != nil {
-			errors.HandleError(w, err)
-			return
-		}
+		name := chi.URLParam(r, "name")
+		owner := chi.URLParam(r, "owner")
 
 		page, pageSize, err := pagination.ParsePaginationParams(r.URL.Query())
 		if err != nil {
@@ -53,7 +49,7 @@ func getCommits(commitService services.CommitService) http.HandlerFunc {
 			return
 		}
 
-		commits, pg, err := commitService.GetCommitsByRepository(r.Context(), repoIDInt, page, pageSize)
+		commits, pg, err := commitService.GetCommitsByRepositoryName(r.Context(), owner, name, page, pageSize)
 		if err != nil {
 			errors.HandleError(w, err)
 			return

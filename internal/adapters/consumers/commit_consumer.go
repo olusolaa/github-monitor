@@ -9,16 +9,20 @@ import (
 )
 
 type CommitConsumer struct {
-	consumer      queue.MessageConsumer
-	publisher     queue.MessagePublisher
-	commitService services.CommitService
+	consumer          queue.MessageConsumer
+	publisher         queue.MessagePublisher
+	repositoryService services.RepositoryService
+	commitService     services.CommitService
+	githubService     services.GitHubService
 }
 
-func NewCommitConsumer(consumer queue.MessageConsumer, publisher queue.MessagePublisher, commitService services.CommitService) *CommitConsumer {
+func NewCommitConsumer(consumer queue.MessageConsumer, publisher queue.MessagePublisher, repositoryService services.RepositoryService, commitService services.CommitService, githubService services.GitHubService) *CommitConsumer {
 	return &CommitConsumer{
-		consumer:      consumer,
-		publisher:     publisher,
-		commitService: commitService,
+		consumer:          consumer,
+		publisher:         publisher,
+		repositoryService: repositoryService,
+		commitService:     commitService,
+		githubService:     githubService,
 	}
 }
 
@@ -36,9 +40,13 @@ func (cc *CommitConsumer) handleMessage(msg []byte) error {
 
 	ctx := context.Background()
 
-	commits, err := cc.commitService.FetchCommits(ctx, repoIDInt, "", "")
+	owner, name, err := cc.repositoryService.GetOwnerAndRepoName(ctx, repoIDInt)
 	if err != nil {
-		logger.LogError(err)
+		return err
+	}
+
+	commits, err := cc.githubService.FetchCommits(ctx, owner, name, "", "", repoIDInt)
+	if err != nil {
 		return err
 	}
 

@@ -21,6 +21,7 @@ type Container struct {
 	repoService        services.RepositoryService
 	commitService      services.CommitService
 	monitorService     *services.MonitorService
+	gitHubService      services.GitHubService
 	publisher          queue.MessagePublisher
 	commitConsumer     *consumers.CommitConsumer
 	monitoringConsumer *consumers.MonitoringConsumer
@@ -48,12 +49,12 @@ func NewContainer(cfg *config.Config) *Container {
 	githubService := services.NewGitHubService(ghClient)
 	repoService := services.NewRepositoryService(githubService, repoRepo)
 	commitService := services.NewCommitService(githubService, repoService, commitRepo)
-	monitorService := services.NewMonitorService(commitService, cfg.MaxRetries, cfg.InitialBackoff)
+	monitorService := services.NewMonitorService(repoService, commitService, githubService, cfg.MaxRetries, cfg.InitialBackoff)
 
 	publisher := queue.NewRabbitMQPublisher(rabbitMQ)
 	consumer := queue.NewRabbitMQConsumer(rabbitMQ)
 
-	commitConsumer := consumers.NewCommitConsumer(consumer, publisher, commitService)
+	commitConsumer := consumers.NewCommitConsumer(consumer, publisher, repoService, commitService, githubService)
 	sched := scheduler.NewScheduler(monitorService, cfg)
 	monitoringConsumer := consumers.NewMonitoringConsumer(consumer, sched)
 
@@ -63,6 +64,7 @@ func NewContainer(cfg *config.Config) *Container {
 		rabbitMQ:           rabbitMQ,
 		repoService:        repoService,
 		commitService:      commitService,
+		gitHubService:      githubService,
 		monitorService:     monitorService,
 		publisher:          publisher,
 		commitConsumer:     commitConsumer,
@@ -71,7 +73,7 @@ func NewContainer(cfg *config.Config) *Container {
 }
 
 func (c *Container) InitializeRepository() {
-	initializer.InitializeRepository(c.repoService, c.publisher, c.cfg.DefaultOwner, c.cfg.DefaultRepo)
+	initializer.InitializeRepository(c.gitHubService, c.repoService, c.publisher, c.cfg.DefaultOwner, c.cfg.DefaultRepo)
 }
 
 func (c *Container) StartCommitConsumer() {
