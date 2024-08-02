@@ -2,6 +2,7 @@ package http
 
 import (
 	"encoding/json"
+	"github.com/olusolaa/github-monitor/pkg/errors"
 	"github.com/olusolaa/github-monitor/pkg/pagination"
 	"net/http"
 	"strconv"
@@ -26,10 +27,9 @@ func getRepository(repoService services.RepositoryService) http.HandlerFunc {
 		owner := chi.URLParam(r, "owner")
 		repo := chi.URLParam(r, "repo")
 
-		// Retrieve repository details
 		repository, err := repoService.FetchRepositoryInfo(r.Context(), repo, owner)
 		if err != nil {
-			handleError(w, err)
+			errors.HandleError(w, err)
 			return
 		}
 
@@ -43,19 +43,19 @@ func getCommits(commitService services.CommitService) http.HandlerFunc {
 		repoID := chi.URLParam(r, "repo_id")
 		repoIDInt, err := strconv.ParseInt(repoID, 10, 64)
 		if err != nil {
-			handleError(w, err)
+			errors.HandleError(w, err)
 			return
 		}
 
 		page, pageSize, err := pagination.ParsePaginationParams(r.URL.Query())
 		if err != nil {
-			handleError(w, err)
+			errors.HandleError(w, err)
 			return
 		}
 
 		commits, pg, err := commitService.GetCommitsByRepository(r.Context(), repoIDInt, page, pageSize)
 		if err != nil {
-			handleError(w, err)
+			errors.HandleError(w, err)
 			return
 		}
 
@@ -76,7 +76,7 @@ func getTopCommitAuthors(commitService services.CommitService) http.HandlerFunc 
 
 		repoIDInt, err := strconv.ParseInt(repoID, 10, 64)
 		if err != nil {
-			handleError(w, err)
+			errors.HandleError(w, err)
 			return
 		}
 
@@ -84,14 +84,14 @@ func getTopCommitAuthors(commitService services.CommitService) http.HandlerFunc 
 		if limitStr != "" {
 			limit, err = strconv.Atoi(limitStr)
 			if err != nil {
-				handleError(w, err)
+				errors.HandleError(w, err)
 				return
 			}
 		}
 
 		authors, err := commitService.GetTopCommitAuthors(r.Context(), repoIDInt, limit)
 		if err != nil {
-			handleError(w, err)
+			errors.HandleError(w, err)
 			return
 		}
 
@@ -105,7 +105,7 @@ func resetCollection(commitService services.CommitService) http.HandlerFunc {
 		repoID := chi.URLParam(r, "repo_id")
 		repoIDInt, err := strconv.ParseInt(repoID, 10, 64)
 		if err != nil {
-			handleError(w, err)
+			errors.HandleError(w, err)
 			return
 		}
 
@@ -123,7 +123,7 @@ func resetCollection(commitService services.CommitService) http.HandlerFunc {
 
 		err = commitService.ResetCollection(r.Context(), repoIDInt, startTime)
 		if err != nil {
-			handleError(w, err)
+			errors.HandleError(w, err)
 			return
 		}
 
@@ -131,23 +131,4 @@ func resetCollection(commitService services.CommitService) http.HandlerFunc {
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]string{"message": "Collection reset successfully"})
 	}
-}
-
-func handleError(w http.ResponseWriter, err error) {
-	var status int
-	var message string
-
-	switch {
-	//case errors.Is(err, services.ErrNotFound):
-	//	status = http.StatusNotFound
-	//	message = "Resource not found"
-	//case errors.Is(err, services.ErrInvalidRequest):
-	//	status = http.StatusBadRequest
-	//	message = "Invalid request"
-	default:
-		status = http.StatusInternalServerError
-		message = "Internal server error"
-	}
-
-	http.Error(w, message, status)
 }

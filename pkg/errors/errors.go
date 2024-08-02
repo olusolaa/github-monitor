@@ -65,3 +65,22 @@ var (
 	// ErrInternalServerError returns status 500 Internal Server Error.
 	ErrInternalServerError = New(http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
 )
+
+func HandleError(w http.ResponseWriter, err error) {
+	var status int
+	var message string
+
+	switch {
+	//case errors.Is(err, services.ErrNotFound):
+	//	status = http.StatusNotFound
+	//	message = "Resource not found"
+	//case errors.Is(err, services.ErrInvalidRequest):
+	//	status = http.StatusBadRequest
+	//	message = "Invalid request"
+	default:
+		status = http.StatusInternalServerError
+		message = "Internal server error"
+	}
+
+	http.Error(w, message, status)
+}
