@@ -6,6 +6,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/olusolaa/github-monitor/internal/core/domain"
 	"github.com/olusolaa/github-monitor/pkg/logger"
+	"github.com/olusolaa/github-monitor/pkg/pagination"
 )
 
 type CommitRepository struct {
@@ -50,20 +51,30 @@ func (c *CommitRepository) GetLatestCommitByRepositoryID(ctx context.Context, re
 	return &commit, nil
 }
 
-// GetCommitsByRepositoryID retrieves all commits for a specified repository, ordered by commit date.
-func (c *CommitRepository) GetCommitsByRepositoryID(ctx context.Context, repoID int64) ([]domain.Commit, error) {
+func (c *CommitRepository) GetCommitsByRepositoryID(ctx context.Context, repoID int64, page, pageSize int) ([]domain.Commit, int, error) {
 	query := `
         SELECT id, repository_id, hash, message, author_name, author_email, commit_date, url
         FROM commits
         WHERE repository_id = $1
-        ORDER BY commit_date DESC;
+        ORDER BY commit_date DESC
     `
+	paginatedQuery := pagination.ApplyToQuery(query, page, pageSize)
+
 	var commits []domain.Commit
-	if err := c.db.SelectContext(ctx, &commits, query, repoID); err != nil {
+	if err := c.db.SelectContext(ctx, &commits, paginatedQuery, repoID); err != nil {
 		logger.LogError(err)
-		return nil, err
+		return nil, 0, err
 	}
-	return commits, nil
+
+	// Count total items for pagination
+	var totalItems int
+	countQuery := `SELECT COUNT(*) FROM commits WHERE repository_id = $1`
+	if err := c.db.GetContext(ctx, &totalItems, countQuery, repoID); err != nil {
+		logger.LogError(err)
+		return nil, 0, err
+	}
+
+	return commits, totalItems, nil
 }
 
 // DeleteCommitsByRepositoryID deletes all commits for a specified repository.

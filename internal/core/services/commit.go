@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"github.com/olusolaa/github-monitor/pkg/pagination"
 	"time"
 
 	"github.com/olusolaa/github-monitor/internal/adapters/postgresdb"
@@ -13,7 +14,7 @@ type CommitService interface {
 	FetchCommits(ctx context.Context, repoID int64, startTime, endTime string) ([]domain.Commit, error)
 	SaveCommits(ctx context.Context, commits []domain.Commit) error
 	GetLatestCommit(ctx context.Context, repoID int64) (*domain.Commit, error)
-	GetCommitsByRepository(ctx context.Context, repoID int64) ([]domain.Commit, error)
+	GetCommitsByRepository(ctx context.Context, repoID int64, page, pageSize int) ([]domain.Commit, *pagination.Pagination, error)
 	ResetCollection(ctx context.Context, repoID int64, startTime time.Time) error
 	GetTopCommitAuthors(ctx context.Context, repoID int64, limit int) ([]domain.CommitAuthor, error)
 }
@@ -63,21 +64,21 @@ func (s *commitService) GetLatestCommit(ctx context.Context, repoID int64) (*dom
 	return latestCommit, nil
 }
 
-// GetCommitsByRepository retrieves all commits for a given repository
-func (s *commitService) GetCommitsByRepository(ctx context.Context, repoID int64) ([]domain.Commit, error) {
-	commits, err := s.commitRepo.GetCommitsByRepositoryID(ctx, repoID)
+func (s *commitService) GetCommitsByRepository(ctx context.Context, repoID int64, page, pageSize int) ([]domain.Commit, *pagination.Pagination, error) {
+	commits, totalItems, err := s.commitRepo.GetCommitsByRepositoryID(ctx, repoID, page, pageSize)
 	if err != nil {
 		logger.LogError(err)
-		return nil, err
+		return nil, nil, err
 	}
-	return commits, nil
+
+	pg := pagination.NewPagination(page, pageSize, totalItems)
+	return commits, pg, nil
 }
 
 func (s *commitService) GetTopCommitAuthors(ctx context.Context, repoID int64, limit int) ([]domain.CommitAuthor, error) {
 	return s.commitRepo.GetTopCommitAuthors(ctx, repoID, limit)
 }
 
-// ResetCollection deletes existing commits and fetches them from a specific point in time
 func (s *commitService) ResetCollection(ctx context.Context, repoID int64, startTime time.Time) error {
 	// Start transaction to ensure atomicity
 	tx, err := s.commitRepo.BeginTx(ctx)

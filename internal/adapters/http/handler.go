@@ -2,6 +2,7 @@ package http
 
 import (
 	"encoding/json"
+	"github.com/olusolaa/github-monitor/pkg/pagination"
 	"net/http"
 	"strconv"
 	"time"
@@ -41,15 +42,30 @@ func getCommits(commitService services.CommitService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		repoID := chi.URLParam(r, "repo_id")
 		repoIDInt, err := strconv.ParseInt(repoID, 10, 64)
-
-		commits, err := commitService.GetCommitsByRepository(r.Context(), repoIDInt)
 		if err != nil {
 			handleError(w, err)
 			return
 		}
 
+		page, pageSize, err := pagination.ParsePaginationParams(r.URL.Query())
+		if err != nil {
+			handleError(w, err)
+			return
+		}
+
+		commits, pg, err := commitService.GetCommitsByRepository(r.Context(), repoIDInt, page, pageSize)
+		if err != nil {
+			handleError(w, err)
+			return
+		}
+
+		response := pagination.PagedResponse{
+			Pagination: pg,
+			Data:       commits,
+		}
+
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(commits)
+		json.NewEncoder(w).Encode(response)
 	}
 }
 
