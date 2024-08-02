@@ -24,27 +24,35 @@ type Config struct {
 }
 
 func LoadConfig() *Config {
-	viper.SetConfigFile(".env") // Specify the config file to read
+	viper.SetConfigFile(".env")
 
 	// Allow reading from environment variables
 	viper.AutomaticEnv()
 
 	// Set default values
-	viper.SetDefault("SERVER_ADDRESS", ":8080")
+	viper.SetDefault("SERVER_ADDRESS", "0.0.0.0:8080")
 	viper.SetDefault("POLL_INTERVAL", 3600) // 1 hour in seconds
 	viper.SetDefault("MAX_RETRIES", 3)
 	viper.SetDefault("INITIAL_BACKOFF", 2) // In seconds
 	viper.SetDefault("LOG_LEVEL", "info")
-	viper.SetDefault("REDIS_URL", "redis://localhost:6379")
-	viper.SetDefault("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
+	viper.SetDefault("REDIS_URL", "redis://redis:6379")                   // Docker service default
+	viper.SetDefault("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/") // Docker service default
+	viper.SetDefault("GITHUB_TOKEN", "default_github_token")
+	viper.SetDefault("DATABASE_DSN", "postgresql://postgres:password@postgres:5432/postgres?sslmode=disable")
+	viper.SetDefault("START_DATE", "2023-01-01T00:00:00Z")
+	viper.SetDefault("WEBHOOK_SECRET", "default_webhook_secret")
+	viper.SetDefault("DEFAULT_OWNER", "chromium")
+	viper.SetDefault("DEFAULT_REPO", "chromium")
 
-	// Read in .env file
+	// Read in .env file, if it exists
 	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			// Config file was found but another error was produced
-			panic(err)
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			// No .env file found, continue with environment variables and defaults
+			log.Println("No .env file found, continuing with environment variables and defaults")
+		} else {
+			// Some other error occurred while reading the config file
+			log.Fatalf("Error reading .env file: %v", err)
 		}
-		log.Println("No .env file found, using environment variables")
 	}
 
 	return &Config{

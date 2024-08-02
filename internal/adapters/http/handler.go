@@ -13,7 +13,6 @@ import (
 )
 
 func RegisterRoutes(r chi.Router, repoService services.RepositoryService, commitService services.CommitService) {
-	//r.Use(APIKeyAuthMiddleware)
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/repos/{owner}/{repo}", getRepository(repoService))
 		r.Get("/repos/{owner}/{name}/commits", getCommits(commitService))
