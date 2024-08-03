@@ -3,63 +3,80 @@ package github
 import (
 	"context"
 	"fmt"
-	"github.com/olusolaa/github-monitor/internal/core/domain"
 	"github.com/olusolaa/github-monitor/pkg/httpclient"
 	"net/http"
 )
 
-const githubAPIBaseURL = "https://api.github.com"
-
-// Client represents a GitHub API client
+// Client represents a GitHub API client.
 type Client struct {
-	httpClient *httpclient.Client
-	token      string
+	httpClient        *httpclient.Client
+	requestBuilder    *httpclient.RequestBuilder
+	responseHandler   *httpclient.ResponseHandler
+	paginationManager *PaginationManager
 }
 
-// NewClient creates a new GitHub API client
-func NewClient(token string) *Client {
-	client := &Client{
-		httpClient: httpclient.NewClient(githubAPIBaseURL),
-		token:      token,
+// NewClient creates a new GitHub API client with custom HTTP client settings.
+func NewClient(baseURL string, httpClient *http.Client) *Client {
+	rateLimiter := NewGitHubRateLimiter()
+
+	customClient := httpclient.NewClient(httpClient, rateLimiter.RateLimitMiddleware, httpclient.LoggingMiddleware, httpclient.AuthMiddleware("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"))
+	requestBuilder := httpclient.NewRequestBuilder(baseURL)
+	responseHandler := httpclient.NewResponseHandler()
+	paginationManager := NewPaginationManager(requestBuilder, customClient, responseHandler)
+
+	return &Client{
+		httpClient:        customClient,
+		requestBuilder:    requestBuilder,
+		responseHandler:   responseHandler,
+		paginationManager: paginationManager,
 	}
-
-	// Set the request hook to add the Authorization header
-	client.httpClient.SetRequestHook(func(req *http.Request) error {
-		req.Header.Set("Authorization", "token "+token)
-		return nil
-	})
-
-	return client
 }
 
-// CommitQueryParams holds the parameters for querying commits
-type CommitQueryParams struct {
-	Since string `url:"since,omitempty"`
-	Until string `url:"until,omitempty"`
-}
-
-// GetRepository fetches repository details from GitHub
-func (c *Client) GetRepository(ctx context.Context, owner, repo string) (*domain.Repository, error) {
-	path := fmt.Sprintf("/repos/%s/%s", owner, repo)
-	var repository domain.Repository
-
-	if err := c.httpClient.GetWithContext(ctx, path, nil, &repository); err != nil {
-		return nil, fmt.Errorf("failed to get repository details: %w", err)
-	}
-	return &repository, nil
-}
-
-// GetCommits fetches commits from a GitHub repository
+// GetCommits fetches commits from a GitHub repository.
 func (c *Client) GetCommits(ctx context.Context, owner, repoName, since, until string) ([]Commit, error) {
-	path := fmt.Sprintf("/repos/%s/%s/commits", owner, repoName)
+	var allCommits []Commit
+
+	reqPath := fmt.Sprintf("/repos/%s/%s/commits", owner, repoName)
 	params := CommitQueryParams{
-		Since: since,
-		Until: until,
+		Since:   since,
+		Until:   until,
+		PerPage: 100,
 	}
 
-	var commits []Commit
-	if err := c.httpClient.GetWithContext(ctx, path, params, &commits); err != nil {
-		return nil, fmt.Errorf("failed to get commits: %w", err)
+	processPage := func(data interface{}) error {
+		commits, ok := data.(*[]Commit)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for commit data", data)
+		}
+		allCommits = append(allCommits, *commits...)
+		return nil
 	}
-	return commits, nil
+
+	out := &[]Commit{}
+
+	err := c.paginationManager.FetchAllPages(ctx, reqPath, params, processPage, out)
+	return allCommits, err
+}
+
+// GetRepository fetches repository details from GitHub.
+func (c *Client) GetRepository(ctx context.Context, owner, repo string) (*Repository, error) {
+	path := fmt.Sprintf("/repos/%s/%s", owner, repo)
+
+	req, err := c.requestBuilder.BuildRequest(ctx, http.MethodGet, path, nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var repository Repository
+	if err := c.responseHandler.HandleResponse(resp, &repository); err != nil {
+		return nil, fmt.Errorf("failed to handle response: %w", err)
+	}
+
+	return &repository, nil
 }
