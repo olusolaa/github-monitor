@@ -12,6 +12,7 @@ import (
 	"github.com/olusolaa/github-monitor/internal/core/services"
 	"github.com/olusolaa/github-monitor/internal/scheduler"
 	"github.com/olusolaa/github-monitor/pkg/logger"
+	"net/http"
 )
 
 type Container struct {
@@ -40,8 +41,7 @@ func NewContainer(cfg *config.Config) *Container {
 		panic(err)
 	}
 
-	//redisCache := cache.NewRedisCache()
-	ghClient := github.NewClient(cfg.GitHubToken)
+	ghClient := github.NewClient("https://api.github.com", http.DefaultClient)
 
 	repoRepo := postgresdb.NewRepositoryRepository(dbConn)
 	commitRepo := postgresdb.NewCommitRepository(dbConn)
@@ -54,7 +54,7 @@ func NewContainer(cfg *config.Config) *Container {
 	publisher := queue.NewRabbitMQPublisher(rabbitMQ)
 	consumer := queue.NewRabbitMQConsumer(rabbitMQ)
 
-	commitConsumer := consumers.NewCommitConsumer(consumer, publisher, repoService, commitService, githubService)
+	commitConsumer := consumers.NewCommitConsumer(consumer, publisher, repoService, commitService, githubService, cfg)
 	sched := scheduler.NewScheduler(monitorService, cfg)
 	monitoringConsumer := consumers.NewMonitoringConsumer(consumer, sched)
 

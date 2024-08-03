@@ -17,7 +17,6 @@ func InitializeRepository(githubService services.GitHubService, repoService serv
 		logger.LogError(err)
 		return
 	}
-	repository.Owner = owner
 
 	err = repoService.UpsertRepository(ctx, repository)
 	if err != nil {

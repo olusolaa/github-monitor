@@ -2,6 +2,7 @@ package consumers
 
 import (
 	"context"
+	"github.com/olusolaa/github-monitor/config"
 	"github.com/olusolaa/github-monitor/internal/adapters/queue"
 	"github.com/olusolaa/github-monitor/internal/core/services"
 	"github.com/olusolaa/github-monitor/pkg/logger"
@@ -14,15 +15,17 @@ type CommitConsumer struct {
 	repositoryService services.RepositoryService
 	commitService     services.CommitService
 	githubService     services.GitHubService
+	cfg               *config.Config
 }
 
-func NewCommitConsumer(consumer queue.MessageConsumer, publisher queue.MessagePublisher, repositoryService services.RepositoryService, commitService services.CommitService, githubService services.GitHubService) *CommitConsumer {
+func NewCommitConsumer(consumer queue.MessageConsumer, publisher queue.MessagePublisher, repositoryService services.RepositoryService, commitService services.CommitService, githubService services.GitHubService, cfg *config.Config) *CommitConsumer {
 	return &CommitConsumer{
 		consumer:          consumer,
 		publisher:         publisher,
 		repositoryService: repositoryService,
 		commitService:     commitService,
 		githubService:     githubService,
+		cfg:               cfg,
 	}
 }
 
@@ -45,7 +48,7 @@ func (cc *CommitConsumer) handleMessage(msg []byte) error {
 		return err
 	}
 
-	commits, err := cc.githubService.FetchCommits(ctx, owner, name, "", "", repoIDInt)
+	commits, err := cc.githubService.FetchCommits(ctx, owner, name, cc.cfg.StartDate, cc.cfg.EndDate, repoIDInt)
 	if err != nil {
 		return err
 	}

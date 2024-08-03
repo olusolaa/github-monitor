@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"fmt"
-
 	"github.com/olusolaa/github-monitor/internal/adapters/github"
 	"github.com/olusolaa/github-monitor/internal/core/domain"
 )
@@ -22,9 +21,23 @@ func NewGitHubService(client *github.Client) GitHubService {
 }
 
 func (s *gitHubService) FetchRepository(ctx context.Context, owner, repoName string) (*domain.Repository, error) {
-	repo, err := s.client.GetRepository(ctx, owner, repoName)
+	apiRepo, err := s.client.GetRepository(ctx, owner, repoName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch repository info: %w", err)
+	}
+
+	repo := &domain.Repository{
+		Owner:           owner,
+		Name:            apiRepo.Name,
+		Description:     apiRepo.Description,
+		URL:             apiRepo.URL,
+		Language:        apiRepo.Language,
+		ForksCount:      apiRepo.ForksCount,
+		StargazersCount: apiRepo.StargazersCount,
+		OpenIssuesCount: apiRepo.OpenIssuesCount,
+		WatchersCount:   apiRepo.WatchersCount,
+		CreatedAt:       apiRepo.CreatedAt,
+		UpdatedAt:       apiRepo.UpdatedAt,
 	}
 	return repo, nil
 }

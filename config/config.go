@@ -15,6 +15,7 @@ type Config struct {
 	MaxRetries     int
 	InitialBackoff time.Duration
 	StartDate      string
+	EndDate        string
 	WebhookSecret  string
 	LogLevel       string
 	DefaultOwner   string
@@ -39,7 +40,8 @@ func LoadConfig() *Config {
 	viper.SetDefault("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/") // Docker service default
 	viper.SetDefault("GITHUB_TOKEN", "default_github_token")
 	viper.SetDefault("DATABASE_DSN", "postgresql://postgres:password@postgres:5432/postgres?sslmode=disable")
-	viper.SetDefault("START_DATE", "2023-01-01T00:00:00Z")
+	viper.SetDefault("START_DATE", "2024-08-03T00:00:00Z")
+	viper.SetDefault("END_DATE", "2024-08-03T10:00:00Z")
 	viper.SetDefault("WEBHOOK_SECRET", "default_webhook_secret")
 	viper.SetDefault("DEFAULT_OWNER", "chromium")
 	viper.SetDefault("DEFAULT_REPO", "chromium")
@@ -63,6 +65,7 @@ func LoadConfig() *Config {
 		MaxRetries:     viper.GetInt("MAX_RETRIES"),
 		InitialBackoff: time.Duration(viper.GetInt("INITIAL_BACKOFF")) * time.Second,
 		StartDate:      viper.GetString("START_DATE"),
+		EndDate:        viper.GetString("END_DATE"),
 		WebhookSecret:  viper.GetString("WEBHOOK_SECRET"),
 		LogLevel:       viper.GetString("LOG_LEVEL"),
 		DefaultOwner:   viper.GetString("DEFAULT_OWNER"),
