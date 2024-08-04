@@ -33,33 +33,27 @@ func (pm *PaginationManager) FetchAllPages(ctx context.Context,
 	var fetchErr error
 
 	for page := 1; ; page++ {
-		// Update page number in parameters
 		switch p := params.(type) {
 		case map[string]string:
 			p["page"] = fmt.Sprintf("%d", page)
 		default:
-			// Handle other parameter types if necessary
 		}
 
-		// Build request
 		req, err := pm.requestBuilder.BuildRequest(ctx, http.MethodGet, path, params, nil)
 		if err != nil {
 			return fmt.Errorf("failed to build request for page %d: %w", page, err)
 		}
 
-		// Execute request
 		resp, err := pm.requestExecutor.Do(req)
 		if err != nil {
 			return fmt.Errorf("failed to get data for page %d: %w", page, err)
 		}
 		defer resp.Body.Close()
 
-		// Handle response
 		if err = pm.responseHandler.HandleResponse(resp, out); err != nil {
 			return fmt.Errorf("failed to process response for page %d: %w", page, err)
 		}
 
-		// Process the page data
 		if err := processPage(out); err != nil {
 			return fmt.Errorf("error processing data for page %d: %w", page, err)
 		}
