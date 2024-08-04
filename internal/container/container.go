@@ -49,7 +49,7 @@ func NewContainer(cfg *config.Config) *Container {
 	}
 
 	githubRateLimiter := github.NewGitHubRateLimiter()
-	ghClient := github.NewClient(cfg.GitHubBaseURL, httpclient.NewClient(http.DefaultClient, githubRateLimiter.RateLimitMiddleware, httpclient.AuthMiddleware(cfg.GitHubToken), httpclient.LoggingMiddleware))
+	ghClient := github.NewClient(cfg.GitHubBaseURL, httpclient.NewClient(http.DefaultClient, githubRateLimiter.RateLimitMiddleware, httpclient.LoggingMiddleware))
 
 	repoRepo := postgresdb.NewRepositoryRepository(dbConn)
 	commitRepo := postgresdb.NewCommitRepository(dbConn)

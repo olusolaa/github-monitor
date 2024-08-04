@@ -7,8 +7,6 @@ GitHub Monitor is a service designed to monitor GitHub repositories, track commi
 
 - [Folder Structure](#folder-structure)
 - [Installation](#installation)
-- [Environment Variables](#environment-variables)
-- [Makefile Commands](#makefile-commands)
 - [API Routes](#api-routes)
 - [Core Logic](#core-logic)
 - [Contribution](#contribution)
@@ -92,82 +90,22 @@ To set up the project locally, follow these steps:
     git clone https://github.com/olusolaa/github-monitor.git
     ```
 
-2. **Install dependencies:**
-
-    Ensure you have [Go](https://golang.org/doc/install) installed. Then, install other dependencies:
-
+2. **Navigate to the project directory:**
     ```sh
-    go mod tidy
-    ```
+   cd github-monitor
+   ```
 
-3. **Install PostgreSQL and RabbitMQ:**
-
-    On macOS, you can install these using Homebrew:
-
+3. **Run the setup script:**
     ```sh
-    brew install postgresql
-    brew install rabbitmq
+    ./setup.sh
     ```
+This script will:
 
-4. **Set up environment variables:**
+- Check for Docker installation and start Docker if necessary.
+- Set up environment variables from the .env file.
+- Build and start the Docker containers for the application, PostgreSQL, and RabbitMQ.
 
-    Create a `.env` file in the root directory and populate it with the necessary environment variables (see the sample below).
 
-## Environment Variables
-
-Here's a sample `.env` file you can use to set up the project. Create a `.env` file in the root directory and populate it with the following environment variables:
-
-```env
-# Server settings
-SERVER_ADDRESS=0.0.0.0:8080
-
-# GitHub settings
-GITHUB_TOKEN=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
-GITHUB_BASE_URL=https://api.github.com
-
-# Database settings
-DATABASE_DSN=postgresql://localhost:5432/github_monitor_db?sslmode=disable
-
-# Polling and webhook settings
-POLL_INTERVAL=3600
-MAX_RETRIES=3
-INITIAL_BACKOFF=2
-START_DATE=2024-08-03T15:20:00Z
-END_DATE=2024-08-03T15:30:00Z
-WEBHOOK_SECRET=your_webhook_secret_here
-
-# Other settings
-LOG_LEVEL=info
-
-DEFAULT_OWNER=chromium
-DEFAULT_REPO=chromium
-REDIS_URL=redis://localhost:6379
-RABBITMQ_URL=amqp://guest:guest@localhost:5672/
-```
-
-## Makefile Commands
-
-The Makefile includes various commands for managing the project. Key commands include:
-
-- **Install migration tool for Mac:**
-    ```sh
-    make install-migrate-mac
-    ```
-
-- **Run migrations:**
-    ```sh
-    make migrate-up-all
-    ```
-
-- **Run the application:**
-    ```sh
-    make run
-    ```
-
-- **Run tests:**
-    ```sh
-    make test
-    ```
 
 ## API Routes
 
