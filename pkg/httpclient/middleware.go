@@ -6,7 +6,6 @@ import (
 	"time"
 )
 
-// LoggingMiddleware logs the details of each request and response.
 func LoggingMiddleware(req *http.Request, next HTTPClient) (*http.Response, error) {
 	start := time.Now()
 	log.Printf("Request: Method=%s, URL=%s, Headers=%v", req.Method, req.URL, req.Header)
@@ -22,7 +21,6 @@ func LoggingMiddleware(req *http.Request, next HTTPClient) (*http.Response, erro
 	return resp, nil
 }
 
-// AuthMiddleware sets the Authorization header with the provided token.
 func AuthMiddleware(token string) func(req *http.Request, next HTTPClient) (*http.Response, error) {
 	return func(req *http.Request, next HTTPClient) (*http.Response, error) {
 		req.Header.Set("Authorization", "Bearer "+token)
@@ -30,7 +28,6 @@ func AuthMiddleware(token string) func(req *http.Request, next HTTPClient) (*htt
 	}
 }
 
-// RetryMiddleware retries failed requests based on the provided retry count and backoff strategy.
 func RetryMiddleware(retryCount int, initialBackoff time.Duration) func(req *http.Request, next HTTPClient) (*http.Response, error) {
 	return func(req *http.Request, next HTTPClient) (*http.Response, error) {
 		var resp *http.Response

@@ -23,18 +23,22 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /goapp cmd/main.go
 FROM alpine:latest
 WORKDIR /root/
 
-# Copy the binary and the .env file from the builder stage
+# Install necessary runtime dependencies, including bash, curl, and ca-certificates
+RUN apk --no-cache add bash ca-certificates curl
+
+# Copy the binary, the .env file, and wait-for-it.sh from the builder stage
 COPY --from=builder /goapp .
 COPY --from=builder /app/.env .env
-
-# Install necessary runtime dependencies, including curl and ca-certificates
-RUN apk --no-cache add ca-certificates curl
+COPY --from=builder /app/wait-for-it.sh ./
 
 # Install gomigrate
 ENV MIGRATE_VERSION v4.14.1
 RUN curl -L https://github.com/golang-migrate/migrate/releases/download/${MIGRATE_VERSION}/migrate.linux-amd64.tar.gz | tar xvz && \
     mv migrate.linux-amd64 /usr/local/bin/migrate && \
     chmod +x /usr/local/bin/migrate
+
+# Make wait-for-it.sh executable
+RUN chmod +x wait-for-it.sh
 
 # Copy the migrations directory
 COPY --from=builder /app/db/migrations /root/migrations
@@ -48,4 +52,3 @@ EXPOSE 8080
 
 # Set the entrypoint
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
-
