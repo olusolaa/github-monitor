@@ -9,11 +9,12 @@ import (
 
 type GitHubService interface {
 	FetchRepository(ctx context.Context, owner, repoName string) (*domain.Repository, error)
-	FetchCommits(ctx context.Context, owner, repoName, since, until string, repoID int64) ([]domain.Commit, error)
+	FetchCommits(ctx context.Context, owner, repoName, since, until string, repoID int64, commitsChan chan<- []domain.Commit, errChan chan<- error)
 }
 
 type gitHubService struct {
-	client *github.Client
+	client        *github.Client
+	commitService commitService
 }
 
 func NewGitHubService(client *github.Client) GitHubService {
@@ -42,15 +43,50 @@ func (s *gitHubService) FetchRepository(ctx context.Context, owner, repoName str
 	return repo, nil
 }
 
-func (s *gitHubService) FetchCommits(ctx context.Context, owner, repoName, since, until string, repoID int64) ([]domain.Commit, error) {
-	apiCommits, err := s.client.GetCommits(ctx, owner, repoName, since, until)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch commits from GitHub: %w", err)
-	}
+func (s *gitHubService) FetchCommits(ctx context.Context, owner, repoName, since, until string, repoID int64, commitsChan chan<- []domain.Commit, errChan chan<- error) {
+	apiCommitsChan := make(chan []github.Commit)
+	apiErrChan := make(chan error)
 
-	commits := make([]domain.Commit, len(apiCommits))
+	go s.client.GetCommits(ctx, owner, repoName, since, until, apiCommitsChan, apiErrChan)
+
+	var encounteredError error
+
+	defer func() {
+		close(commitsChan)
+		close(errChan)
+		if encounteredError != nil {
+			errChan <- encounteredError
+		}
+	}()
+
+	for {
+		select {
+		case apiCommits, ok := <-apiCommitsChan:
+			if !ok {
+				return
+			}
+			domainCommits := s.convertToDomainCommits(apiCommits, repoID)
+			select {
+			case commitsChan <- domainCommits:
+			case <-ctx.Done():
+				encounteredError = ctx.Err()
+				return
+			}
+		case err := <-apiErrChan:
+			encounteredError = err
+			return
+		case <-ctx.Done():
+			encounteredError = ctx.Err()
+			return
+		}
+	}
+}
+
+// convertToDomainCommits converts API commits to domain commits.
+func (s *gitHubService) convertToDomainCommits(apiCommits []github.Commit, repoID int64) []domain.Commit {
+	domainCommits := make([]domain.Commit, len(apiCommits))
 	for i, commit := range apiCommits {
-		commits[i] = domain.Commit{
+		domainCommits[i] = domain.Commit{
 			RepositoryID: repoID,
 			Hash:         commit.Sha,
 			Message:      commit.Commit.Message,
@@ -60,5 +96,5 @@ func (s *gitHubService) FetchCommits(ctx context.Context, owner, repoName, since
 			URL:          commit.Commit.Url,
 		}
 	}
-	return commits, nil
+	return domainCommits
 }

@@ -2,6 +2,8 @@ package services
 
 import (
 	"context"
+	"fmt"
+	"github.com/olusolaa/github-monitor/internal/core/domain"
 	"time"
 
 	"github.com/olusolaa/github-monitor/pkg/logger"
@@ -58,11 +60,10 @@ func (m *MonitorService) syncRepositoryAndCommits(ctx context.Context, repositor
 	return m.MonitorRepositoryCommits(ctx, repositoryID)
 }
 
-// MonitorRepositoryCommits fetches new commits and updates the database.
 func (m *MonitorService) MonitorRepositoryCommits(ctx context.Context, repositoryID int64) error {
 	latestCommit, err := m.commitService.GetLatestCommit(ctx, repositoryID)
 	if err != nil {
-		return err
+		return fmt.Errorf("could not get latest commit: %w", err)
 	}
 
 	var since string
@@ -72,15 +73,29 @@ func (m *MonitorService) MonitorRepositoryCommits(ctx context.Context, repositor
 
 	owner, name, err := m.repositoryService.GetOwnerAndRepoName(ctx, repositoryID)
 	if err != nil {
-		return err
+		return fmt.Errorf("could not get repository owner and name: %w", err)
 	}
 
-	commits, err := m.gitHubService.FetchCommits(ctx, owner, name, since, "", repositoryID)
-	if err != nil {
-		return err
-	}
+	domainCommitsChan := make(chan []domain.Commit)
+	errChan := make(chan error)
 
-	return m.commitService.SaveCommits(ctx, commits)
+	go m.gitHubService.FetchCommits(ctx, owner, name, since, "", repositoryID, domainCommitsChan, errChan)
+
+	for {
+		select {
+		case domainCommits, ok := <-domainCommitsChan:
+			if !ok {
+				return nil
+			}
+			if err := m.commitService.SaveCommits(ctx, domainCommits); err != nil {
+				return fmt.Errorf("failed to save commits: %w", err)
+			}
+		case err := <-errChan:
+			return fmt.Errorf("error fetching commits: %w", err)
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 }
 
 // SyncRepositoryInfo fetches and updates repository information.

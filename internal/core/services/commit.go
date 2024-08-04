@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"github.com/olusolaa/github-monitor/pkg/pagination"
 	"time"
 
@@ -86,23 +87,35 @@ func (s *commitService) ResetCollection(ctx context.Context, repoID int64, start
 		return err
 	}
 
-	commits, err := s.gitHubService.FetchCommits(ctx, owner, name, startTimeStr, "", repoID)
-	if err != nil {
-		logger.LogError(err)
-		tx.Rollback()
-		return err
-	}
+	domainCommitsChan := make(chan []domain.Commit)
+	errChan := make(chan error)
 
-	if len(commits) == 0 {
-		logger.LogInfo("No new commits found")
-		return nil
-	}
+	go s.gitHubService.FetchCommits(ctx, owner, name, startTimeStr, "", repoID, domainCommitsChan, errChan)
 
-	// Save new commits
-	if err := s.SaveCommits(ctx, commits); err != nil {
-		logger.LogError(err)
-		tx.Rollback()
-		return err
+	for {
+		select {
+		case domainCommits, ok := <-domainCommitsChan:
+			if !ok {
+				domainCommitsChan = nil
+			} else {
+				if err := s.SaveCommits(ctx, domainCommits); err != nil {
+					logger.LogError(err)
+					tx.Rollback()
+					return err
+				}
+			}
+		case err := <-errChan:
+			logger.LogError(err)
+			tx.Rollback()
+			return fmt.Errorf("error fetching commits: %w", err)
+		case <-ctx.Done():
+			tx.Rollback()
+			return ctx.Err()
+		}
+
+		if domainCommitsChan == nil && errChan == nil {
+			break
+		}
 	}
 
 	// Commit transaction

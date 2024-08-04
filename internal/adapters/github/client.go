@@ -16,10 +16,8 @@ type Client struct {
 }
 
 // NewClient creates a new GitHub API client with custom HTTP client settings.
-func NewClient(baseURL string, httpClient *http.Client) *Client {
-	rateLimiter := NewGitHubRateLimiter()
-
-	customClient := httpclient.NewClient(httpClient, rateLimiter.RateLimitMiddleware, httpclient.LoggingMiddleware, httpclient.AuthMiddleware("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"))
+func NewClient(baseURL string, client *httpclient.Client) *Client {
+	customClient := client
 	requestBuilder := httpclient.NewRequestBuilder(baseURL)
 	responseHandler := httpclient.NewResponseHandler()
 	paginationManager := NewPaginationManager(requestBuilder, customClient, responseHandler)
@@ -32,9 +30,9 @@ func NewClient(baseURL string, httpClient *http.Client) *Client {
 	}
 }
 
-// GetCommits fetches commits from a GitHub repository.
-func (c *Client) GetCommits(ctx context.Context, owner, repoName, since, until string) ([]Commit, error) {
-	var allCommits []Commit
+func (c *Client) GetCommits(ctx context.Context, owner, repoName, since, until string, commitsChan chan<- []Commit, errChan chan<- error) {
+	defer close(commitsChan)
+	defer close(errChan)
 
 	reqPath := fmt.Sprintf("/repos/%s/%s/commits", owner, repoName)
 	params := CommitQueryParams{
@@ -48,14 +46,22 @@ func (c *Client) GetCommits(ctx context.Context, owner, repoName, since, until s
 		if !ok {
 			return fmt.Errorf("unexpected type %T for commit data", data)
 		}
-		allCommits = append(allCommits, *commits...)
+
+		select {
+		case commitsChan <- *commits:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 		return nil
 	}
 
 	out := &[]Commit{}
-
-	err := c.paginationManager.FetchAllPages(ctx, reqPath, params, processPage, out)
-	return allCommits, err
+	if err := c.paginationManager.FetchAllPages(ctx, reqPath, params, processPage, out); err != nil {
+		select {
+		case errChan <- err:
+		case <-ctx.Done():
+		}
+	}
 }
 
 // GetRepository fetches repository details from GitHub.

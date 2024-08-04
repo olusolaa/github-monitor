@@ -115,14 +115,15 @@ To set up the project locally, follow these steps:
 
 ## Environment Variables
 
-Here's a sample `.env` file you can use as a template:
+Here's a sample `.env` file you can use to set up the project. Create a `.env` file in the root directory and populate it with the following environment variables:
 
 ```env
 # Server settings
 SERVER_ADDRESS=0.0.0.0:8080
 
 # GitHub settings
-GITHUB_TOKEN=your_github_token_here
+GITHUB_TOKEN=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
+GITHUB_BASE_URL=https://api.github.com
 
 # Database settings
 DATABASE_DSN=postgresql://localhost:5432/github_monitor_db?sslmode=disable
@@ -131,7 +132,8 @@ DATABASE_DSN=postgresql://localhost:5432/github_monitor_db?sslmode=disable
 POLL_INTERVAL=3600
 MAX_RETRIES=3
 INITIAL_BACKOFF=2
-START_DATE=2023-01-01T00:00:00Z
+START_DATE=2024-08-03T15:20:00Z
+END_DATE=2024-08-03T15:30:00Z
 WEBHOOK_SECRET=your_webhook_secret_here
 
 # Other settings

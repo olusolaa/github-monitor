@@ -6,7 +6,6 @@ import (
 	"github.com/olusolaa/github-monitor/pkg/httpclient"
 	"net/http"
 	"strings"
-	"sync"
 )
 
 // PaginationManager manages paginated API requests.
@@ -31,20 +30,9 @@ func (pm *PaginationManager) FetchAllPages(ctx context.Context,
 	params interface{},
 	processPage func(interface{}) error,
 	out interface{}) error {
-	var (
-		wg       sync.WaitGroup
-		mu       sync.Mutex
-		fetchErr error
-		lastPage bool
-	)
-	maxConcurrentRequests := 5
-	sem := make(chan struct{}, maxConcurrentRequests)
+	var fetchErr error
 
-	fetchPage := func(page int) {
-		defer wg.Done()
-		sem <- struct{}{} // Acquire semaphore
-		defer func() { <-sem }()
-
+	for page := 1; ; page++ {
 		// Update page number in parameters
 		switch p := params.(type) {
 		case map[string]string:
@@ -56,97 +44,59 @@ func (pm *PaginationManager) FetchAllPages(ctx context.Context,
 		// Build request
 		req, err := pm.requestBuilder.BuildRequest(ctx, http.MethodGet, path, params, nil)
 		if err != nil {
-			mu.Lock()
-			if fetchErr == nil {
-				fetchErr = fmt.Errorf("failed to build request for page %d: %w", page, err)
-			}
-			mu.Unlock()
-			return
-		}
-
-		// Check if req is nil to prevent further issues
-		if req == nil {
-			mu.Lock()
-			if fetchErr == nil {
-				fetchErr = fmt.Errorf("nil request returned for page %d", page)
-			}
-			mu.Unlock()
-			return
+			return fmt.Errorf("failed to build request for page %d: %w", page, err)
 		}
 
 		// Execute request
 		resp, err := pm.requestExecutor.Do(req)
 		if err != nil {
-			mu.Lock()
-			if fetchErr == nil {
-				fetchErr = fmt.Errorf("failed to get data for page %d: %w", page, err)
-			}
-			mu.Unlock()
-			return
+			return fmt.Errorf("failed to get data for page %d: %w", page, err)
 		}
 		defer resp.Body.Close()
 
 		// Handle response
 		if err = pm.responseHandler.HandleResponse(resp, out); err != nil {
-			mu.Lock()
-			if fetchErr == nil {
-				fetchErr = fmt.Errorf("failed to process response for page %d: %w", page, err)
-			}
-			mu.Unlock()
-			return
+			return fmt.Errorf("failed to process response for page %d: %w", page, err)
 		}
 
 		// Process the page data
 		if err := processPage(out); err != nil {
-			mu.Lock()
-			if fetchErr == nil {
-				fetchErr = fmt.Errorf("error processing data for page %d: %w", page, err)
-			}
-			mu.Unlock()
-			return
+			return fmt.Errorf("error processing data for page %d: %w", page, err)
 		}
 
 		// Check if there are more pages
 		if !pm.HasNextPage(resp) {
-			mu.Lock()
-			lastPage = true
-			mu.Unlock()
-		}
-	}
-
-	// Start fetching pages concurrently
-	for page := 1; ; page++ {
-		// Check if we should stop fetching more pages
-		mu.Lock()
-		if lastPage || fetchErr != nil {
-			mu.Unlock()
+			fmt.Printf("Last page reached: %d\n", page)
 			break
 		}
-		mu.Unlock()
 
+		// Check for context cancellation
 		select {
 		case <-ctx.Done():
+			fmt.Println("Context done, stopping fetch.")
 			return ctx.Err()
 		default:
-			wg.Add(1)
-			go fetchPage(page)
+			// Continue fetching next page
 		}
 	}
 
-	// Wait for all fetches to complete
-	wg.Wait()
+	fmt.Println("All pages fetched successfully.")
 	return fetchErr
 }
 
 // HasNextPage checks if there is a next page based on the Link header.
 func (pm *PaginationManager) HasNextPage(resp *http.Response) bool {
 	linkHeader := resp.Header.Get("Link")
+	if linkHeader == "" {
+		// No Link header found, assuming no more pages
+		return false
+	}
+	// Check if "next" relation exists in the Link header
 	return pm.parseLinkHeader(linkHeader, "next") != ""
 }
 
 // parseLinkHeader parses the Link header and returns the URL for the given relation (rel).
 func (pm *PaginationManager) parseLinkHeader(header, rel string) string {
-	// Example format: <https://api.github.com/repositories/1300192/commits?page=2>; rel="next"
 	links := strings.Split(header, ",")
 	for _, link := range links {
 		parts := strings.Split(link, ";")
@@ -155,123 +105,7 @@ func (pm *PaginationManager) parseLinkHeader(header, rel string) string {
 		}
 		urlPart := strings.Trim(parts[0], " <>")
 		relPart := strings.Trim(parts[1], " ")
-		if relPart == fmt.Sprintf("rel=%q", rel) {
-			return urlPart
-		}
-	}
-	return ""
-}
-
-type Manager struct {
-	client Client
-}
-
-func NewManager(client Client) *Manager {
-	return &Manager{
-		client: client,
-	}
-}
-
-func (m *Manager) FetchAllPages(
-	ctx context.Context,
-	path string,
-	params map[string]string,
-	processPage func(interface{}) error,
-	out interface{},
-) error {
-	var (
-		wg       sync.WaitGroup
-		mu       sync.Mutex
-		fetchErr error
-		lastPage bool
-	)
-	maxConcurrentRequests := 5
-	sem := make(chan struct{}, maxConcurrentRequests)
-
-	fetchPage := func(page int) {
-		defer wg.Done()
-		sem <- struct{}{} // Acquire semaphore
-		defer func() { <-sem }()
-
-		// Update page number in parameters
-		params["page"] = fmt.Sprintf("%d", page)
-
-		// Build request
-		req, err := m.client.requestBuilder.BuildRequest(ctx, http.MethodGet, path, params, nil)
-		if err != nil {
-			mu.Lock()
-			fetchErr = err
-			mu.Unlock()
-			return
-		}
-
-		// Execute request
-		resp, err := m.client.httpClient.Do(req)
-		if err != nil {
-			mu.Lock()
-			fetchErr = err
-			mu.Unlock()
-			return
-		}
-		defer resp.Body.Close()
-
-		// Handle response
-		if err := m.client.responseHandler.HandleResponse(resp, out); err != nil {
-			mu.Lock()
-			fetchErr = err
-			mu.Unlock()
-			return
-		}
-
-		// Process the page data
-		if err := processPage(out); err != nil {
-			mu.Lock()
-			fetchErr = err
-			mu.Unlock()
-			return
-		}
-
-		// Check if there are more pages
-		if !m.HasNextPage(resp) {
-			mu.Lock()
-			lastPage = true
-			mu.Unlock()
-		}
-	}
-
-	// Start fetching pages concurrently
-	for page := 1; ; page++ {
-		mu.Lock()
-		if lastPage || fetchErr != nil {
-			mu.Unlock()
-			break
-		}
-		mu.Unlock()
-
-		wg.Add(1)
-		go fetchPage(page)
-	}
-
-	// Wait for all fetches to complete
-	wg.Wait()
-	return fetchErr
-}
-
-func (m *Manager) HasNextPage(resp *http.Response) bool {
-	linkHeader := resp.Header.Get("Link")
-	return parseLinkHeader(linkHeader, "next") != ""
-}
-
-func parseLinkHeader(header, rel string) string {
-	links := strings.Split(header, ",")
-	for _, link := range links {
-		parts := strings.Split(link, ";")
-		if len(parts) < 2 {
-			continue
-		}
-		urlPart := strings.Trim(parts[0], " <>")
-		relPart := strings.Trim(parts[1], " ")
-		if relPart == fmt.Sprintf("rel=%q", rel) {
+		if strings.Contains(relPart, fmt.Sprintf(`rel="%s"`, rel)) {
 			return urlPart
 		}
 	}

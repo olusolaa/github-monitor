@@ -5,11 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	valid "github.com/asaskevich/govalidator"
+	"github.com/google/go-querystring/query"
 	"io"
 	"net/http"
 	"strings"
-
-	"github.com/google/go-querystring/query"
 )
 
 // RequestBuilder helps in building HTTP requests.
@@ -33,16 +33,17 @@ func (rb *RequestBuilder) SetHeader(key, value string) {
 
 // BuildRequest creates an HTTP request with the specified method, path, query parameters, and body.
 func (rb *RequestBuilder) BuildRequest(ctx context.Context, method, path string, params interface{}, body interface{}) (*http.Request, error) {
-	url := rb.baseURL + "/" + strings.TrimLeft(path, "/")
-
-	// Handle query parameters for GET and DELETE requests
 	if (method == http.MethodGet || method == http.MethodDelete) && params != nil {
-		v, err := query.Values(params)
+		_, err := valid.ValidateStruct(params)
 		if err != nil {
-			return nil, fmt.Errorf("failed to encode query parameters: %w", err)
+			return nil, fmt.Errorf("invalid query parameters: %w", err)
 		}
-		url = url + "?" + v.Encode()
+
+		v, _ := query.Values(params)
+		path = path + "?" + v.Encode()
 	}
+
+	url := rb.baseURL + "/" + strings.TrimLeft(path, "/")
 
 	var reqBody io.Reader
 	if body != nil {

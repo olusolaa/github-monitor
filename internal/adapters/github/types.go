@@ -29,10 +29,10 @@ type Commit struct {
 
 // CommitQueryParams contains query parameters for fetching commits
 type CommitQueryParams struct {
-	Since   string
-	Until   string
-	Page    int
-	PerPage int
+	Since   string `url:"since"`
+	Until   string `url:"until"`
+	Page    int    `url:"page"`
+	PerPage int    `url:"per_page"`
 }
 
 type Repository struct {

@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - SERVER_ADDRESS=${SERVER_ADDRESS:-"0.0.0.0:8080"}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-"default_github_token"}
+      - POLL_INTERVAL=${POLL_INTERVAL:-3600}
+      - MAX_RETRIES=${MAX_RETRIES:-3}
+      - INITIAL_BACKOFF=${INITIAL_BACKOFF:-2}
+      - START_DATE=${START_DATE:-"2023-01-01T00:00:00Z"}
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET:-"default_webhook_secret"}
+      - LOG_LEVEL=${LOG_LEVEL:-"info"}
+      - DEFAULT_OWNER=${DEFAULT_OWNER:-"chromium"}
+      - DEFAULT_REPO=${DEFAULT_REPO:-"chromium"}
+      - RABBITMQ_URL=${RABBITMQ_URL:-"amqp://guest:guest@rabbitmq:5672/"}
+      - POSTGRES_USER=${POSTGRES_USER:-"postgres"}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-"password"}
+      - POSTGRES_DB=${POSTGRES_DB:-"postgres"}
+      - POSTGRES_HOST=${POSTGRES_HOST:-"postgres"}
+    depends_on:
+      - postgres
+      - rabbitmq
+
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+volumes:
+  postgres_data:

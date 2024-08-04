@@ -1,6 +1,8 @@
 package container
 
 import (
+	"fmt"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 	"github.com/olusolaa/github-monitor/config"
@@ -11,7 +13,9 @@ import (
 	"github.com/olusolaa/github-monitor/internal/core/initializer"
 	"github.com/olusolaa/github-monitor/internal/core/services"
 	"github.com/olusolaa/github-monitor/internal/scheduler"
+	"github.com/olusolaa/github-monitor/pkg/httpclient"
 	"github.com/olusolaa/github-monitor/pkg/logger"
+	"github.com/pkg/errors"
 	"net/http"
 )
 
@@ -29,19 +33,23 @@ type Container struct {
 }
 
 func NewContainer(cfg *config.Config) *Container {
-	dbConn, err := sqlx.Open("postgres", cfg.DatabaseDSN)
+	connStr := fmt.Sprintf("postgresql://%s:%s@%s:5432/%s?sslmode=disable",
+		cfg.PostgresUser, cfg.PostgresPassword, cfg.PostgresHost, cfg.PostgresDB)
+
+	dbConn, err := sqlx.Open("postgres", connStr)
 	if err != nil {
-		logger.LogError(err)
+		logger.LogError(errors.Wrap(err, "Error connecting to database"))
 		panic(err)
 	}
 
 	rabbitMQ, err := queue.NewRabbitMQConnectionManager(cfg.RabbitMQURL)
 	if err != nil {
-		logger.LogError(err)
+		logger.LogError(errors.Wrap(err, "Error connecting to RabbitMQ"))
 		panic(err)
 	}
 
-	ghClient := github.NewClient("https://api.github.com", http.DefaultClient)
+	githubRateLimiter := github.NewGitHubRateLimiter()
+	ghClient := github.NewClient(cfg.GitHubBaseURL, httpclient.NewClient(http.DefaultClient, githubRateLimiter.RateLimitMiddleware, httpclient.AuthMiddleware(cfg.GitHubToken), httpclient.LoggingMiddleware))
 
 	repoRepo := postgresdb.NewRepositoryRepository(dbConn)
 	commitRepo := postgresdb.NewCommitRepository(dbConn)
