@@ -58,6 +58,7 @@ func (cs *commitService) processCommits(repoID int64, monitoringChan chan int64,
 	go cs.gitHubService.FetchCommits(ctx, owner, name, startDate, endDate, repoID, domainCommitsChan, errChan)
 
 	var fetchError error
+	var domainCommitsProcessed bool
 
 	for {
 		select {
@@ -71,6 +72,7 @@ func (cs *commitService) processCommits(repoID int64, monitoringChan chan int64,
 						fetchError = err
 					}
 				}
+				domainCommitsProcessed = true
 			}
 		case err, ok := <-errChan:
 			if !ok {
@@ -89,13 +91,19 @@ func (cs *commitService) processCommits(repoID int64, monitoringChan chan int64,
 		}
 	}
 
-	if fetchError == nil {
+	if fetchError == nil && domainCommitsProcessed {
 		monitoringChan <- repoID
 	} else {
 		log.Printf("Error during commit processing: %v", fetchError)
 	}
-	close(domainCommitsChan)
-	close(errChan)
+
+	// Avoid closing channels that are passed in or potentially nil
+	if domainCommitsChan != nil {
+		close(domainCommitsChan)
+	}
+	if errChan != nil {
+		close(errChan)
+	}
 }
 
 // SaveCommits saves the provided commits into the repository

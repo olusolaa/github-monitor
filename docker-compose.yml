@@ -16,14 +16,12 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-"info"}
       - DEFAULT_OWNER=${DEFAULT_OWNER:-"chromium"}
       - DEFAULT_REPO=${DEFAULT_REPO:-"chromium"}
-      - RABBITMQ_URL=${RABBITMQ_URL:-"amqp://guest:guest@rabbitmq:5672/"}
       - POSTGRES_USER=${POSTGRES_USER:-"postgres"}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-"password"}
       - POSTGRES_DB=${POSTGRES_DB:-"postgres"}
       - POSTGRES_HOST=${POSTGRES_HOST:-"postgres"}
     depends_on:
       - postgres
-      - rabbitmq
 
   postgres:
     image: postgres:13
@@ -35,12 +33,6 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-
-  rabbitmq:
-    image: rabbitmq:3-management
-    ports:
-      - "5672:5672"
-      - "15672:15672"
 
 volumes:
   postgres_data:

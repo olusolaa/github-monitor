@@ -5,8 +5,6 @@ if [ -f .env ]; then
   export $(cat .env | grep -v '#' | awk '/=/ {print $1}')
 fi
 
-./wait-for-it.sh rabbitmq:5672 -- echo "RabbitMQ is up"
-
 ./wait-for-it.sh postgres:5432 -- echo "PostgreSQL is up"
 
 echo "Running migrations..."

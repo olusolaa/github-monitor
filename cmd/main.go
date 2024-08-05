@@ -37,6 +37,7 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
+	// Register routes with the HTTP router
 	httpHandlers.RegisterRoutes(r, diContainer.GetRepoService(), diContainer.GetCommitService())
 
 	// Define and start the HTTP server
