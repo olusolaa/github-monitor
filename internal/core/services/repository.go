@@ -67,7 +67,7 @@ func (s *repositoryService) RepositoryManager(commitChan chan int64) {
 }
 
 func (s *repositoryService) FetchRepository(ctx context.Context, owner, repo string, commitChan chan int64) error {
-	repository, err := s.ghService.FetchRepository(ctx, repo, owner)
+	repository, err := s.ghService.FetchRepository(ctx, owner, repo)
 	if err != nil {
 		logger.LogError(err)
 		return err
