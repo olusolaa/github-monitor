@@ -30,13 +30,13 @@ func main() {
 	diContainer.InitializeRepository()
 
 	// Start message consumers for commit processing and monitoring
-	go diContainer.StartCommitConsumer()
-	go diContainer.StartMonitoringConsumer()
+	go diContainer.StartServices()
 
 	// Set up the HTTP router
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+
 	httpHandlers.RegisterRoutes(r, diContainer.GetRepoService(), diContainer.GetCommitService())
 
 	// Define and start the HTTP server

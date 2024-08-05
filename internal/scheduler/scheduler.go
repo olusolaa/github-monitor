@@ -13,17 +13,35 @@ import (
 type Scheduler struct {
 	monitorService *services.MonitorService
 	cfg            *config.Config
+	schedulers     map[int64]*gocron.Scheduler // Map to track schedulers by repo ID
 }
 
 func NewScheduler(monitorService *services.MonitorService, cfg *config.Config) *Scheduler {
-	return &Scheduler{monitorService: monitorService, cfg: cfg}
+	return &Scheduler{
+		monitorService: monitorService,
+		cfg:            cfg,
+		schedulers:     make(map[int64]*gocron.Scheduler),
+	}
 }
 
-func (s *Scheduler) ScheduleMonitoring(repoID int64) {
-	scheduler := gocron.NewScheduler(time.UTC)
+func (s *Scheduler) ScheduleMonitoring(monitoringChan chan int64) {
+	for repoID := range monitoringChan {
+		if _, exists := s.schedulers[repoID]; !exists {
+			scheduler := gocron.NewScheduler(time.UTC)
+			s.schedulerJob(scheduler, repoID)
+			s.schedulerStart(scheduler, repoID)
+		}
+	}
+}
+
+func (s *Scheduler) schedulerJob(scheduler *gocron.Scheduler, repoID int64) {
 	scheduler.Every(s.cfg.PollInterval).Do(func() {
 		s.monitorRepository(repoID)
 	})
+}
+
+func (s *Scheduler) schedulerStart(scheduler *gocron.Scheduler, repoID int64) {
+	s.schedulers[repoID] = scheduler
 	scheduler.StartAsync()
 }
 

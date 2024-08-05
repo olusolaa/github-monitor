@@ -3,12 +3,13 @@ package services
 import (
 	"context"
 	"fmt"
-	"github.com/olusolaa/github-monitor/pkg/pagination"
+	"log"
 	"time"
 
 	"github.com/olusolaa/github-monitor/internal/adapters/postgresdb"
 	"github.com/olusolaa/github-monitor/internal/core/domain"
 	"github.com/olusolaa/github-monitor/pkg/logger"
+	"github.com/olusolaa/github-monitor/pkg/pagination"
 )
 
 type CommitService interface {
@@ -17,16 +18,84 @@ type CommitService interface {
 	GetCommitsByRepositoryName(ctx context.Context, owner, name string, page, pageSize int) ([]domain.Commit, *pagination.Pagination, error)
 	ResetCollection(ctx context.Context, repoID int64, startTime time.Time) error
 	GetTopCommitAuthors(ctx context.Context, repoID int64, limit int) ([]domain.CommitAuthor, error)
+	CommitManager(monitoringChan chan int64, startDate, endDate string)
 }
 
 type commitService struct {
 	gitHubService     GitHubService
 	repositoryService RepositoryService
 	commitRepo        *postgresdb.CommitRepository
+	commitChan        chan int64
 }
 
-func NewCommitService(gitHubService GitHubService, repositoryService RepositoryService, commitRepo *postgresdb.CommitRepository) CommitService {
-	return &commitService{gitHubService: gitHubService, repositoryService: repositoryService, commitRepo: commitRepo}
+func NewCommitService(gitHubService GitHubService, repositoryService RepositoryService, commitRepo *postgresdb.CommitRepository, commitChan chan int64) CommitService {
+	return &commitService{
+		gitHubService:     gitHubService,
+		repositoryService: repositoryService,
+		commitRepo:        commitRepo,
+		commitChan:        commitChan,
+	}
+}
+
+func (cs *commitService) CommitManager(monitoringChan chan int64, startDate, endDate string) {
+	for repoID := range cs.commitChan {
+		go cs.processCommits(repoID, monitoringChan, startDate, endDate)
+	}
+}
+
+func (cs *commitService) processCommits(repoID int64, monitoringChan chan int64, startDate, endDate string) {
+	ctx := context.Background()
+
+	owner, name, err := cs.repositoryService.GetOwnerAndRepoName(ctx, repoID)
+	if err != nil {
+		log.Printf("Error getting owner and repo name: %v", err)
+		return
+	}
+
+	domainCommitsChan := make(chan []domain.Commit)
+	errChan := make(chan error)
+
+	go cs.gitHubService.FetchCommits(ctx, owner, name, startDate, endDate, repoID, domainCommitsChan, errChan)
+
+	var fetchError error
+
+	for {
+		select {
+		case domainCommits, ok := <-domainCommitsChan:
+			if !ok {
+				domainCommitsChan = nil
+			} else {
+				if err := cs.SaveCommits(ctx, domainCommits); err != nil {
+					log.Printf("Error saving commits: %v", err)
+					if fetchError == nil {
+						fetchError = err
+					}
+				}
+			}
+		case err, ok := <-errChan:
+			if !ok {
+				errChan = nil
+			} else if err != nil && fetchError == nil {
+				fetchError = fmt.Errorf("error fetching commits: %w", err)
+			}
+		case <-ctx.Done():
+			if fetchError == nil {
+				fetchError = ctx.Err()
+			}
+		}
+
+		if domainCommitsChan == nil && errChan == nil {
+			break
+		}
+	}
+
+	if fetchError == nil {
+		monitoringChan <- repoID
+	} else {
+		log.Printf("Error during commit processing: %v", fetchError)
+	}
+	close(domainCommitsChan)
+	close(errChan)
 }
 
 // SaveCommits saves the provided commits into the repository

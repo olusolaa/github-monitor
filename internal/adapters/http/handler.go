@@ -18,7 +18,25 @@ func RegisterRoutes(r chi.Router, repoService services.RepositoryService, commit
 		r.Get("/repos/{owner}/{name}/commits", getCommits(commitService))
 		r.Get("/repos/{repo_id}/top-authors", getTopCommitAuthors(commitService))
 		r.Post("/repos/{repo_id}/reset-collection", resetCollection(commitService))
+		r.Post("/repos/{owner}/{name}/monitor", monitorRepository(repoService))
 	})
+}
+
+func monitorRepository(repoService services.RepositoryService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		owner := chi.URLParam(r, "owner")
+		name := chi.URLParam(r, "name")
+
+		err := repoService.AddRepository(r.Context(), owner, name)
+		if err != nil {
+			errors.HandleError(w, err)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]string{"message": "Repository monitoring triggered successfully"})
+	}
 }
 
 func getRepository(repoService services.RepositoryService) http.HandlerFunc {
