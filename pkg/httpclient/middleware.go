@@ -27,26 +27,3 @@ func AuthMiddleware(token string) func(req *http.Request, next HTTPClient) (*htt
 		return next.Do(req)
 	}
 }
-
-func RetryMiddleware(retryCount int, initialBackoff time.Duration) func(req *http.Request, next HTTPClient) (*http.Response, error) {
-	return func(req *http.Request, next HTTPClient) (*http.Response, error) {
-		var resp *http.Response
-		var err error
-		backoff := initialBackoff
-
-		for i := 0; i <= retryCount; i++ {
-			resp, err = next.Do(req)
-			if err == nil {
-				if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-					return resp, nil
-				}
-			}
-
-			if i < retryCount {
-				time.Sleep(backoff)
-				backoff *= 2 // Exponential backoff
-			}
-		}
-		return resp, err
-	}
-}

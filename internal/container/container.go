@@ -10,7 +10,6 @@ import (
 	"github.com/olusolaa/github-monitor/internal/adapters/github"
 	"github.com/olusolaa/github-monitor/internal/adapters/postgresdb"
 	"github.com/olusolaa/github-monitor/internal/adapters/queue"
-	"github.com/olusolaa/github-monitor/internal/core/initializer"
 	"github.com/olusolaa/github-monitor/internal/core/services"
 	"github.com/olusolaa/github-monitor/internal/scheduler"
 	"github.com/olusolaa/github-monitor/pkg/httpclient"
@@ -49,7 +48,7 @@ func NewContainer(cfg *config.Config) *Container {
 	}
 
 	githubRateLimiter := github.NewGitHubRateLimiter()
-	ghClient := github.NewClient(cfg.GitHubBaseURL, httpclient.NewClient(http.DefaultClient, githubRateLimiter.RateLimitMiddleware, httpclient.LoggingMiddleware))
+	ghClient := github.NewClient(cfg.GitHubBaseURL, httpclient.NewClient(http.DefaultClient, githubRateLimiter.RateLimitMiddleware, httpclient.LoggingMiddleware, httpclient.AuthMiddleware(cfg.GitHubToken)))
 
 	repoRepo := postgresdb.NewRepositoryRepository(dbConn)
 	commitRepo := postgresdb.NewCommitRepository(dbConn)
@@ -81,7 +80,10 @@ func NewContainer(cfg *config.Config) *Container {
 }
 
 func (c *Container) InitializeRepository() {
-	initializer.InitializeRepository(c.gitHubService, c.repoService, c.publisher, c.cfg.DefaultOwner, c.cfg.DefaultRepo)
+	err := c.repoService.InitializeRepository(c.publisher, c.cfg.DefaultOwner, c.cfg.DefaultRepo)
+	if err != nil {
+		panic(fmt.Errorf("error initializing repository: %v", err))
+	}
 }
 
 func (c *Container) StartCommitConsumer() {
