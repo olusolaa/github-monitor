@@ -27,7 +27,7 @@ func monitorRepository(repoService services.RepositoryService) http.HandlerFunc 
 		owner := chi.URLParam(r, "owner")
 		name := chi.URLParam(r, "name")
 
-		err := repoService.AddRepository(r.Context(), owner, name)
+		err := repoService.AddRepository(owner, name)
 		if err != nil {
 			errors.HandleError(w, err)
 			return

@@ -1,7 +1,6 @@
 package container
 
 import (
-	"context"
 	"fmt"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
@@ -87,8 +86,7 @@ func initializeDatabase(connStr string) (*sqlx.DB, error) {
 }
 
 func (c *Container) InitializeRepository() {
-	ctx := context.Background()
-	err := c.repoService.AddRepository(ctx, c.cfg.DefaultOwner, c.cfg.DefaultRepo)
+	err := c.repoService.AddRepository(c.cfg.DefaultOwner, c.cfg.DefaultRepo)
 	if err != nil {
 		panic(fmt.Errorf("error initializing repository: %v", err))
 	}

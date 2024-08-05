@@ -11,7 +11,7 @@ type RepositoryService interface {
 	GetRepository(ctx context.Context, name, owner string) (*domain.Repository, error)
 	GetOwnerAndRepoName(ctx context.Context, repoID int64) (string, string, error)
 	UpsertRepository(ctx context.Context, repository *domain.Repository) error
-	AddRepository(ctx context.Context, owner, repo string) error
+	AddRepository(owner, repo string) error
 	FetchRepository(ctx context.Context, owner, repo string, commitChan chan int64) error
 }
 
@@ -19,7 +19,6 @@ type RepoRequest struct {
 	Owner string
 	Name  string
 	retry int
-	ctx   context.Context
 }
 
 type repositoryService struct {
@@ -38,12 +37,11 @@ func NewRepositoryService(ghService GitHubService, repoRepo *postgresdb.Reposito
 	return s
 }
 
-func (s *repositoryService) AddRepository(ctx context.Context, owner, repo string) error {
+func (s *repositoryService) AddRepository(owner, repo string) error {
 	repoRequest := RepoRequest{
 		Owner: owner,
 		Name:  repo,
 		retry: 0,
-		ctx:   ctx,
 	}
 	s.repoChan <- repoRequest
 	return nil
@@ -53,7 +51,8 @@ func (s *repositoryService) RepositoryManager(commitChan chan int64) {
 	for {
 		select {
 		case repoRequest := <-s.repoChan:
-			err := s.FetchRepository(repoRequest.ctx, repoRequest.Owner, repoRequest.Name, commitChan)
+			ctx := context.Background()
+			err := s.FetchRepository(ctx, repoRequest.Owner, repoRequest.Name, commitChan)
 			if err != nil {
 				repoRequest.retry++
 				if repoRequest.retry < 3 {
