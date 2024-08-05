@@ -3,6 +3,8 @@ package container
 import (
 	"context"
 	"fmt"
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/postgres"
 	"net/http"
 
 	_ "github.com/golang-migrate/migrate/v4/source/file"
@@ -14,7 +16,6 @@ import (
 	"github.com/olusolaa/github-monitor/internal/core/services"
 	"github.com/olusolaa/github-monitor/internal/scheduler"
 	"github.com/olusolaa/github-monitor/pkg/httpclient"
-	"github.com/olusolaa/github-monitor/pkg/logger"
 	"github.com/pkg/errors"
 )
 
@@ -34,10 +35,13 @@ func NewContainer(cfg *config.Config) *Container {
 	connStr := fmt.Sprintf("postgresql://%s:%s@%s:5432/%s?sslmode=disable",
 		cfg.PostgresUser, cfg.PostgresPassword, cfg.PostgresHost, cfg.PostgresDB)
 
-	dbConn, err := sqlx.Open("postgres", connStr)
+	dbConn, err := initializeDatabase(connStr)
 	if err != nil {
-		logger.LogError(errors.Wrap(err, "Error connecting to database"))
-		panic(err)
+		panic(errors.Wrap(err, "Error connecting to database"))
+	}
+
+	if err := runMigrations(connStr); err != nil {
+		panic(errors.Wrap(err, "Error running migrations"))
 	}
 
 	githubRateLimiter := github.NewGitHubRateLimiter()
@@ -68,6 +72,20 @@ func NewContainer(cfg *config.Config) *Container {
 	}
 }
 
+func initializeDatabase(connStr string) (*sqlx.DB, error) {
+
+	dbConn, err := sqlx.Open("postgres", connStr)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := dbConn.Ping(); err != nil {
+		return nil, err
+	}
+
+	return dbConn, nil
+}
+
 func (c *Container) InitializeRepository() {
 	ctx := context.Background()
 	err := c.repoService.AddRepository(ctx, c.cfg.DefaultOwner, c.cfg.DefaultRepo)
@@ -85,12 +103,35 @@ func (c *Container) GetCommitService() services.CommitService {
 }
 
 func (c *Container) StartServices() {
-	// Start the commit handler
 	go c.commitService.CommitManager(c.monitoringChan, c.cfg.StartDate, c.cfg.EndDate)
-	// Start the scheduler service
 	go c.scheduler.ScheduleMonitoring(c.monitoringChan)
 }
 
 func (c *Container) Close() {
 	c.dbConn.Close()
+}
+
+func runMigrations(dsn string) error {
+	db, err := sqlx.Open("postgres", dsn)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	driver, err := postgres.WithInstance(db.DB, &postgres.Config{})
+	if err != nil {
+		return err
+	}
+
+	m, err := migrate.NewWithDatabaseInstance(
+		"file://db/migrations",
+		"postgres", driver)
+	if err != nil {
+		return err
+	}
+
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		return err
+	}
+	return nil
 }

@@ -51,12 +51,10 @@ func (m *MonitorService) MonitorRepository(ctx context.Context, repositoryID int
 
 // syncRepositoryAndCommits fetches and updates both repository information and commits.
 func (m *MonitorService) syncRepositoryAndCommits(ctx context.Context, repositoryID int64) error {
-	// Synchronize repository information
 	if err := m.SyncRepositoryInfo(ctx, repositoryID); err != nil {
 		return err
 	}
 
-	// Monitor and save new commits
 	return m.MonitorRepositoryCommits(ctx, repositoryID)
 }
 
