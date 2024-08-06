@@ -142,3 +142,103 @@ The following routes are available in the application:
 ## Core Logic
 
 The core logic of the application is primarily located in the `internal` and `internal/core/services` directories. The `services` package contains business logic related to repositories, commits, GitHub interactions, and monitoring.
+
+## Sample API Requests and Responses
+
+#### 1. Fetch Repository Details
+**Method**: GET  
+**URL**: `http://localhost:8080/api/repos/chromium/chromium`  
+**Sample Response**:
+```json
+{
+    "name": "chromium",
+    "description": "The official GitHub mirror of the Chromium source",
+    "url": "https://api.github.com/repos/chromium/chromium",
+    "language": "C++",
+    "forks_count": 6805,
+    "stargazers_count": 18393,
+    "open_issues_count": 93,
+    "watchers_count": 18393,
+    "created_at": "2018-02-05T20:55:32Z",
+    "updated_at": "2024-08-04T03:16:04Z"
+}
+```
+
+#### 2. Fetch Commits for a Repository
+**Method**: GET  
+**URL**: `http://localhost:8080/api/repos/chromium/chromium/commits?page=1&page_size=50`  
+**Sample Response**:
+```json
+{
+    "pagination": {
+        "page": 1,
+        "page_size": 50,
+        "total_pages": 42,
+        "total_items": 2058
+    },
+    "data": [
+        {
+            "hash": "1d09fe5035f03602eadd372519b3e57c87701d6c",
+            "message": "[iOSKAUpgrade] Fix overflow menu position for addresses without name",
+            "author_name": "Chromium LUCI CQ",
+            "author_email": "chromium-scoped@luci-project-accounts.iam.gserviceaccount.com",
+            "commit_date": "2024-08-06T15:20:02+01:00",
+            "url": "https://api.github.com/repos/chromium/chromium/git/commits/1d09fe5035f03602eadd372519b3e57c87701d6c"
+        },
+        {
+            "hash": "cb97b87fe0b5e404d0b7b0c7eaec4e5baaf3c407",
+            "message": "Create DTCKeyRotationUploadedBySharedAPIEnabled feature.",
+            "author_name": "Chromium LUCI CQ",
+            "author_email": "chromium-scoped@luci-project-accounts.iam.gserviceaccount.com",
+            "commit_date": "2024-08-06T15:18:30+01:00",
+            "url": "https://api.github.com/repos/chromium/chromium/git/commits/cb97b87fe0b5e404d0b7b0c7eaec4e5baaf3c407"
+        }
+    ]
+}
+```
+
+#### 3. Reset Collection
+**Method**: POST  
+**URL**: `http://localhost:8080/api/repos/chromium/chromium/reset-collection?start_time=2024-08-01T00:00:00Z`  
+**Sample Response**:
+```json
+{
+    "message": "Collection reset successfully"
+}
+```
+
+#### 4. Get Top Authors
+**Method**: GET  
+**URL**: `http://localhost:8080/api/repos/chromium/chromium/top-authors?limit=3`  
+**Sample Response**:
+```json
+[
+    {
+        "author_name": "Chromium LUCI CQ",
+        "author_email": "chromium-scoped@luci-project-accounts.iam.gserviceaccount.com",
+        "commit_count": 2039
+    },
+    {
+        "author_name": "Chrome Release Bot (LUCI)",
+        "author_email": "chrome-official-brancher@chops-service-accounts.iam.gserviceaccount.com",
+        "commit_count": 11
+    },
+    {
+        "author_name": "Nico Weber",
+        "author_email": "thakis@chromium.org",
+        "commit_count": 4
+    }
+]
+```
+
+#### 5. Monitor a Repository
+**Method**: POST  
+**URL**: `http://localhost:8080/api/repos/facebook/react/monitor`  
+**Sample Response**:
+```json
+{
+    "message": "Repository monitoring triggered successfully"
+}
+```
+
+These examples showcase how to interact with the GitHub Monitor API. The endpoints support various actions such as fetching repository details, commit history, resetting data collections, and starting monitoring for repositories.
