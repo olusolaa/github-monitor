@@ -1,86 +1,107 @@
 package errors
 
 import (
+	"encoding/json"
 	"errors"
-	"github.com/go-chi/render"
+	"fmt"
 	"net/http"
+	"runtime"
+	"time"
 )
 
-type errLogger interface {
-	Error(args ...interface{})
-}
+// Severity levels for errors
+type Severity string
 
-// New returns *ErrResponse which implements Error interface
-func New(errText string, statusCode ...int) *ErrResponse {
-	sc := http.StatusBadRequest
-	if len(statusCode) > 0 {
-		sc = statusCode[0]
-	}
-	return &ErrResponse{
-		Err:            errors.New(errText),
-		HTTPStatusCode: sc,
-		StatusText:     http.StatusText(sc),
-		ErrorText:      errText,
-	}
-}
-
-// CoverErr returns the err if it is an *ErrResponse and returns a
-// defaultTo if otherwise. The value ErrResponse tells us that the error was handled
-// and  should not notify sentry
-func CoverErr(err, defaultTo error, logger errLogger) error {
-	if err == nil {
-		return nil
-	}
-	if _, ok := err.(*ErrResponse); ok {
-		return err
-	}
-	logger.Error(err)
-	return defaultTo
-}
-
-// ErrResponse renderer type for handling all sorts of errors.
-type ErrResponse struct {
-	Err            error  `json:"-"`                 // low-level runtime error
-	HTTPStatusCode int    `json:"-"`                 // http response status code
-	AppCode        int64  `json:"-"`                 // application-specific error code
-	StatusText     string `json:"status"`            // users-level status message
-	ErrorText      string `json:"message,omitempty"` // application-level error message, for debugging
-}
-
-func (e ErrResponse) Error() string {
-	return e.Err.Error()
-}
-
-// Render sets the application-specific error code in AppCode.
-func (e *ErrResponse) Render(w http.ResponseWriter, r *http.Request) error {
-	render.Status(r, e.HTTPStatusCode)
-	return nil
-}
-
-var (
-	// ErrBadRequest returns status 400 Bad Request for malformed request body.
-	ErrBadRequest = New(http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-	// ErrNotFound returns status 404 Not Found for invalid resource request.
-	ErrNotFound = New(http.StatusText(http.StatusNotFound), http.StatusNotFound)
-	// ErrInternalServerError returns status 500 Internal Server Error.
-	ErrInternalServerError = New(http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
+const (
+	Critical Severity = "Critical"
+	Warning  Severity = "Warning"
+	Info     Severity = "Info"
 )
 
+// CustomError defines a structure for custom errors with additional context
+type CustomError struct {
+	Code       string
+	Message    string
+	Err        error
+	Severity   Severity
+	Timestamp  time.Time
+	StackTrace string
+}
+
+// Error returns the error message string
+func (e *CustomError) Error() string {
+	if e.Err != nil {
+		return fmt.Sprintf("[%s][%s] %s: %v", e.Timestamp.Format(time.RFC3339), e.Code, e.Message, e.Err)
+	}
+	return fmt.Sprintf("[%s][%s] %s", e.Timestamp.Format(time.RFC3339), e.Code, e.Message)
+}
+
+// Unwrap returns the underlying error
+func (e *CustomError) Unwrap() error {
+	return e.Err
+}
+
+// New creates a new custom error with stack trace
+func New(code, message string, err error, severity Severity) error {
+	return &CustomError{
+		Code:       code,
+		Message:    message,
+		Err:        err,
+		Severity:   severity,
+		Timestamp:  time.Now(),
+		StackTrace: getStackTrace(),
+	}
+}
+
+// getStackTrace captures the current stack trace
+func getStackTrace() string {
+	stackBuf := make([]byte, 1024)
+	stackBuf = stackBuf[:runtime.Stack(stackBuf, false)]
+	return string(stackBuf)
+}
+
+// APIError defines a structure for API error responses
+type APIError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Details string `json:"details,omitempty"`
+}
+
+// HandleError handles errors and sends an appropriate HTTP response
 func HandleError(w http.ResponseWriter, err error) {
-	var status int
-	var message string
+	var apiErr APIError
 
+	var e *CustomError
 	switch {
-	//case errors.Is(err, services.ErrNotFound):
-	//	status = http.StatusNotFound
-	//	message = "Resource not found"
-	//case errors.Is(err, services.ErrInvalidRequest):
-	//	status = http.StatusBadRequest
-	//	message = "Invalid request"
+	case errors.As(err, &e):
+		apiErr = APIError{
+			Code:    mapSeverityToHTTPStatus(e.Severity),
+			Message: e.Message,
+			Details: e.Err.Error(),
+		}
 	default:
-		status = http.StatusInternalServerError
-		message = "Internal server error"
+		apiErr = APIError{
+			Code:    http.StatusInternalServerError,
+			Message: "Internal Server Error",
+			Details: err.Error(),
+		}
 	}
 
-	http.Error(w, message, status)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(apiErr.Code)
+	json.NewEncoder(w).Encode(apiErr)
+}
+
+// mapSeverityToHTTPStatus maps custom error severity to HTTP status codes
+func mapSeverityToHTTPStatus(severity Severity) int {
+	switch severity {
+	case Critical:
+		return http.StatusInternalServerError
+	case Warning:
+		return http.StatusBadRequest
+	case Info:
+		return http.StatusOK
+	default:
+		return http.StatusInternalServerError
+	}
 }

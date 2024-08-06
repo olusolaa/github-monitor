@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/go-co-op/gocron"
@@ -26,6 +27,7 @@ func NewScheduler(monitorService *services.MonitorService, cfg *config.Config) *
 
 func (s *Scheduler) ScheduleMonitoring(monitoringChan chan int64) {
 	for repoID := range monitoringChan {
+		logger.LogInfo(fmt.Sprintf("Monitoring scheduled for repository ID: %d", repoID))
 		if _, exists := s.schedulers[repoID]; !exists {
 			scheduler := gocron.NewScheduler(time.UTC)
 			s.schedulerJob(scheduler, repoID)
@@ -48,6 +50,6 @@ func (s *Scheduler) schedulerStart(scheduler *gocron.Scheduler, repoID int64) {
 func (s *Scheduler) monitorRepository(repoID int64) {
 	ctx := context.Background()
 	if err := s.monitorService.MonitorRepository(ctx, repoID); err != nil {
-		logger.LogError(err)
+		logger.LogError(fmt.Errorf("monitoring failed for repository ID %d: %w", repoID, err))
 	}
 }

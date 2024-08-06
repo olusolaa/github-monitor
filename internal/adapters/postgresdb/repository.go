@@ -4,18 +4,16 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"github.com/jmoiron/sqlx"
 	"github.com/olusolaa/github-monitor/internal/core/domain"
-	"github.com/olusolaa/github-monitor/pkg/logger"
 	"time"
 )
 
-// RepositoryRepository manages the database operations for repository data.
 type RepositoryRepository struct {
 	db *sqlx.DB
 }
 
-// NewRepositoryRepository creates a new instance of RepositoryRepository.
 func NewRepositoryRepository(db *sqlx.DB) *RepositoryRepository {
 	return &RepositoryRepository{db: db}
 }
@@ -51,7 +49,7 @@ func (r *RepositoryRepository) Upsert(ctx context.Context, repository *domain.Re
 	).Scan(&repository.ID)
 	if err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
-			logger.LogError(err)
+			return fmt.Errorf("failed to upsert repository: %w", err)
 		}
 		return err
 	}
@@ -67,8 +65,7 @@ func (r *RepositoryRepository) FindByNameAndOwner(ctx context.Context, name, own
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil // No rows found, return nil without logging an error
 		}
-		logger.LogError(err)
-		return nil, err
+		return nil, fmt.Errorf("failed to find repository by name and owner: %w", err)
 	}
 	return &repository, nil
 }
@@ -82,8 +79,7 @@ func (r *RepositoryRepository) GetOwnerAndRepoName(ctx context.Context, repoID i
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", "", nil // No rows found, return empty strings without error
 		}
-		logger.LogError(err)
-		return "", "", err
+		return "", "", fmt.Errorf("failed to get owner and repository name: %w", err)
 	}
 	return owner, name, nil
 }
@@ -99,5 +95,8 @@ func (r *RepositoryRepository) Update(ctx context.Context, repo *domain.Reposito
         WHERE id = $6`
 
 	_, err := r.db.ExecContext(ctx, query, repo.ForksCount, repo.StargazersCount, repo.OpenIssuesCount, repo.WatchersCount, time.Now(), repo.ID)
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to update repository: %w", err)
+	}
+	return nil
 }

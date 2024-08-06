@@ -3,11 +3,11 @@ package services
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/olusolaa/github-monitor/internal/adapters/postgresdb"
 	"github.com/olusolaa/github-monitor/internal/core/domain"
+	"github.com/olusolaa/github-monitor/pkg/errors"
 	"github.com/olusolaa/github-monitor/pkg/logger"
 	"github.com/olusolaa/github-monitor/pkg/pagination"
 )
@@ -48,70 +48,61 @@ func (cs *commitService) processCommits(repoID int64, monitoringChan chan int64,
 
 	owner, name, err := cs.repositoryService.GetOwnerAndRepoName(ctx, repoID)
 	if err != nil {
-		log.Printf("Error getting owner and repo name: %v", err)
+		logger.LogError(errors.New("GET_OWNER_REPO_NAME_ERROR", "error getting owner and repo name", err, errors.Critical))
 		return
 	}
+
+	var encounteredError error
 
 	domainCommitsChan := make(chan []domain.Commit)
 	errChan := make(chan error)
 
-	go cs.gitHubService.FetchCommits(ctx, owner, name, startDate, endDate, repoID, domainCommitsChan, errChan)
+	defer func() {
+		close(domainCommitsChan)
+		close(errChan)
 
-	var fetchError error
-	var domainCommitsProcessed bool
+		if encounteredError != nil {
+			logger.LogError(errors.New("FETCH_COMMITS_ERROR", "error fetching commits", encounteredError, errors.Critical))
+		} else {
+			logger.LogInfo(fmt.Sprintf("Commits fetched successfully for %s/%s", owner, name))
+			monitoringChan <- repoID
+		}
+	}()
+
+	go cs.gitHubService.FetchCommits(ctx, owner, name, startDate, endDate, repoID, domainCommitsChan, errChan)
 
 	for {
 		select {
 		case domainCommits, ok := <-domainCommitsChan:
 			if !ok {
-				domainCommitsChan = nil
-			} else {
-				if err := cs.SaveCommits(ctx, domainCommits); err != nil {
-					log.Printf("Error saving commits: %v", err)
-					if fetchError == nil {
-						fetchError = err
-					}
-				}
-				domainCommitsProcessed = true
+				encounteredError = errors.New("DOMAIN_COMMITS_CHANNEL_CLOSED", "domain commits channel closed unexpectedly", nil, errors.Critical)
+				return
+			}
+			if err := cs.SaveCommits(ctx, domainCommits); err != nil {
+				encounteredError = err
+				return
 			}
 		case err, ok := <-errChan:
 			if !ok {
-				errChan = nil
-			} else if err != nil && fetchError == nil {
-				fetchError = fmt.Errorf("error fetching commits: %w", err)
+				encounteredError = errors.New("ERR_CHANNEL_CLOSED", "error channel closed unexpectedly", nil, errors.Critical)
+			} else if err != nil {
+				encounteredError = err
 			}
+			return
 		case <-ctx.Done():
-			if fetchError == nil {
-				fetchError = ctx.Err()
-			}
+			encounteredError = errors.New("CONTEXT_DONE", "context canceled or timed out", ctx.Err(), errors.Critical)
+			return
 		}
-
-		if domainCommitsChan == nil && errChan == nil {
-			break
-		}
-	}
-
-	if fetchError == nil && domainCommitsProcessed {
-		monitoringChan <- repoID
-	} else {
-		log.Printf("Error during commit processing: %v", fetchError)
-	}
-
-	// Avoid closing channels that are passed in or potentially nil
-	if domainCommitsChan != nil {
-		close(domainCommitsChan)
-	}
-	if errChan != nil {
-		close(errChan)
 	}
 }
 
 // SaveCommits saves the provided commits into the repository
 func (s *commitService) SaveCommits(ctx context.Context, commits []domain.Commit) error {
 	if err := s.commitRepo.Save(ctx, commits); err != nil {
-		logger.LogError(err)
+		logger.LogError(errors.New("SAVE_COMMITS_ERROR", "error saving commits", err, errors.Critical))
 		return err
 	}
+	logger.LogInfo(fmt.Sprintf("Saved %d commits successfully", len(commits)))
 	return nil
 }
 
@@ -119,7 +110,7 @@ func (s *commitService) SaveCommits(ctx context.Context, commits []domain.Commit
 func (s *commitService) GetLatestCommit(ctx context.Context, repoID int64) (*domain.Commit, error) {
 	latestCommit, err := s.commitRepo.GetLatestCommitByRepositoryID(ctx, repoID)
 	if err != nil {
-		logger.LogError(err)
+		logger.LogError(errors.New("GET_LATEST_COMMIT_ERROR", "error retrieving the latest commit", err, errors.Critical))
 		return nil, err
 	}
 	return latestCommit, nil
@@ -128,38 +119,49 @@ func (s *commitService) GetLatestCommit(ctx context.Context, repoID int64) (*dom
 func (s *commitService) GetCommitsByRepositoryName(ctx context.Context, owner, name string, page, pageSize int) ([]domain.Commit, *pagination.Pagination, error) {
 	commits, totalItems, err := s.commitRepo.GetCommitsByRepositoryName(ctx, owner, name, page, pageSize)
 	if err != nil {
-		logger.LogError(err)
+		logger.LogError(errors.New("GET_COMMITS_ERROR", "error retrieving commits", err, errors.Critical))
 		return nil, nil, err
 	}
 
 	pg := pagination.NewPagination(page, pageSize, totalItems)
+	logger.LogInfo(fmt.Sprintf("Fetched %d commits for %s/%s", len(commits), owner, name))
 	return commits, pg, nil
 }
 
 func (s *commitService) GetTopCommitAuthors(ctx context.Context, repoID int64, limit int) ([]domain.CommitAuthor, error) {
-	return s.commitRepo.GetTopCommitAuthors(ctx, repoID, limit)
+	authors, err := s.commitRepo.GetTopCommitAuthors(ctx, repoID, limit)
+	if err != nil {
+		logger.LogError(errors.New("GET_TOP_AUTHORS_ERROR", "error retrieving top commit authors", err, errors.Critical))
+		return nil, err
+	}
+	logger.LogInfo(fmt.Sprintf("Fetched top commit authors for repo ID: %d", repoID))
+	return authors, nil
 }
 
 func (s *commitService) ResetCollection(ctx context.Context, repoID int64, startTime time.Time) error {
-	// Start transaction to ensure atomicity
 	tx, err := s.commitRepo.BeginTx(ctx)
 	if err != nil {
-		logger.LogError(err)
+		logger.LogError(errors.New("BEGIN_TRANSACTION_ERROR", "error beginning transaction", err, errors.Critical))
 		return err
 	}
 
-	// Delete existing commits
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+			logger.LogError(errors.New("PANIC", "panic occurred during ResetCollection", fmt.Errorf("%v", r), errors.Critical))
+		}
+	}()
+
 	if err := s.commitRepo.DeleteCommitsByRepositoryID(ctx, repoID); err != nil {
-		logger.LogError(err)
+		logger.LogError(errors.New("DELETE_COMMITS_ERROR", "error deleting commits", err, errors.Critical))
 		tx.Rollback()
 		return err
 	}
 
-	// Fetch new commits from the start time
 	startTimeStr := startTime.Format(time.RFC3339)
 	owner, name, err := s.repositoryService.GetOwnerAndRepoName(ctx, repoID)
 	if err != nil {
-		logger.LogError(err)
+		logger.LogError(errors.New("GET_OWNER_REPO_NAME_ERROR", "error getting owner and repo name", err, errors.Critical))
 		tx.Rollback()
 		return err
 	}
@@ -167,7 +169,17 @@ func (s *commitService) ResetCollection(ctx context.Context, repoID int64, start
 	domainCommitsChan := make(chan []domain.Commit)
 	errChan := make(chan error)
 
-	go s.gitHubService.FetchCommits(ctx, owner, name, startTimeStr, "", repoID, domainCommitsChan, errChan)
+	go func() {
+		defer func() {
+			if domainCommitsChan != nil {
+				close(domainCommitsChan)
+			}
+			if errChan != nil {
+				close(errChan)
+			}
+		}()
+		s.gitHubService.FetchCommits(ctx, owner, name, startTimeStr, "", repoID, domainCommitsChan, errChan)
+	}()
 
 	for {
 		select {
@@ -176,16 +188,19 @@ func (s *commitService) ResetCollection(ctx context.Context, repoID int64, start
 				domainCommitsChan = nil
 			} else {
 				if err := s.SaveCommits(ctx, domainCommits); err != nil {
-					logger.LogError(err)
+					logger.LogError(errors.New("SAVE_COMMITS_ERROR", "error saving commits", err, errors.Critical))
 					tx.Rollback()
 					return err
 				}
 			}
 		case err := <-errChan:
-			logger.LogError(err)
-			tx.Rollback()
-			return fmt.Errorf("error fetching commits: %w", err)
+			if err != nil {
+				logger.LogError(errors.New("FETCH_COMMITS_ERROR", "error fetching commits", err, errors.Critical))
+				tx.Rollback()
+				return err
+			}
 		case <-ctx.Done():
+			logger.LogError(errors.New("CONTEXT_DONE", "context canceled or timed out", ctx.Err(), errors.Critical))
 			tx.Rollback()
 			return ctx.Err()
 		}
@@ -195,11 +210,11 @@ func (s *commitService) ResetCollection(ctx context.Context, repoID int64, start
 		}
 	}
 
-	// Commit transaction
 	if err := tx.Commit(); err != nil {
-		logger.LogError(err)
+		logger.LogError(errors.New("COMMIT_TRANSACTION_ERROR", "error committing transaction", err, errors.Critical))
 		return err
 	}
 
+	logger.LogInfo(fmt.Sprintf("Collection reset successfully for repository ID: %d", repoID))
 	return nil
 }

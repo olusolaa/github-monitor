@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"fmt"
+	"github.com/olusolaa/github-monitor/pkg/errors"
 	"github.com/olusolaa/github-monitor/pkg/httpclient"
 	"net/http"
 	"strings"
@@ -36,45 +37,50 @@ func (pm *PaginationManager) FetchAllPages(ctx context.Context,
 		switch p := params.(type) {
 		case map[string]string:
 			p["page"] = fmt.Sprintf("%d", page)
+		case CommitQueryParams:
+			p.Page = page
 		default:
+			fetchErr = errors.New("INVALID_PARAMS_TYPE", "invalid params type", nil, errors.Critical)
+			break
 		}
 
 		req, err := pm.requestBuilder.BuildRequest(ctx, http.MethodGet, path, params, nil)
 		if err != nil {
-			return fmt.Errorf("failed to build request for page %d: %w", page, err)
+			fetchErr = errors.New("BUILD_REQUEST_ERROR", fmt.Sprintf("failed to build request for page %d", page), err, errors.Critical)
+			break
 		}
 
 		resp, err := pm.requestExecutor.Do(req)
 		if err != nil {
-			return fmt.Errorf("failed to get data for page %d: %w", page, err)
+			fetchErr = errors.New("REQUEST_EXECUTION_ERROR", fmt.Sprintf("failed to get data for page %d", page), err, errors.Critical)
+			break
 		}
 		defer resp.Body.Close()
 
 		if err = pm.responseHandler.HandleResponse(resp, out); err != nil {
-			return fmt.Errorf("failed to process response for page %d: %w", page, err)
+			fetchErr = errors.New("RESPONSE_HANDLING_ERROR", fmt.Sprintf("failed to process response for page %d", page), err, errors.Critical)
+			break
 		}
 
 		if err := processPage(out); err != nil {
-			return fmt.Errorf("error processing data for page %d: %w", page, err)
+			fetchErr = errors.New("PROCESS_PAGE_ERROR", fmt.Sprintf("error processing data for page %d", page), err, errors.Critical)
+			break
 		}
 
 		// Check if there are more pages
 		if !pm.HasNextPage(resp) {
-			fmt.Printf("Last page reached: %d\n", page)
 			break
 		}
 
 		// Check for context cancellation
 		select {
 		case <-ctx.Done():
-			fmt.Println("Context done, stopping fetch.")
 			return ctx.Err()
 		default:
 			// Continue fetching next page
 		}
 	}
 
-	fmt.Println("All pages fetched successfully.")
 	return fetchErr
 }
 

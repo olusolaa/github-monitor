@@ -4,9 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"github.com/jmoiron/sqlx"
 	"github.com/olusolaa/github-monitor/internal/core/domain"
-	"github.com/olusolaa/github-monitor/pkg/logger"
 	"github.com/olusolaa/github-monitor/pkg/pagination"
 )
 
@@ -25,9 +25,9 @@ func (c *CommitRepository) Save(ctx context.Context, commits []domain.Commit) er
         VALUES (:repository_id, :hash, :message, :author_name, :author_email, :commit_date, :url)
         ON CONFLICT (hash) DO NOTHING;
     `
-	if _, err := c.db.NamedExecContext(ctx, query, commits); err != nil {
-		logger.LogError(err)
-		return err
+	_, err := c.db.NamedExecContext(ctx, query, commits)
+	if err != nil {
+		return fmt.Errorf("database save error: %w", err)
 	}
 	return nil
 }
@@ -46,8 +46,7 @@ func (c *CommitRepository) GetLatestCommitByRepositoryID(ctx context.Context, re
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
-		logger.LogError(err)
-		return nil, err
+		return nil, fmt.Errorf("failed to get latest commit: %w", err)
 	}
 	return &commit, nil
 }
@@ -65,8 +64,7 @@ func (c *CommitRepository) GetCommitsByRepositoryName(ctx context.Context, owner
 
 	var commits []domain.Commit
 	if err := c.db.SelectContext(ctx, &commits, paginatedQuery, name, owner); err != nil {
-		logger.LogError(err)
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("failed to get commits by repository name: %w", err)
 	}
 
 	// Count total items for pagination
@@ -75,8 +73,7 @@ func (c *CommitRepository) GetCommitsByRepositoryName(ctx context.Context, owner
                    JOIN repositories ON commits.repository_id = repositories.id
                    WHERE repositories.name = $1 AND repositories.owner = $2`
 	if err := c.db.GetContext(ctx, &totalItems, countQuery, name, owner); err != nil {
-		logger.LogError(err)
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("failed to count total commits: %w", err)
 	}
 
 	return commits, totalItems, nil
@@ -89,8 +86,7 @@ func (c *CommitRepository) DeleteCommitsByRepositoryID(ctx context.Context, repo
         WHERE repository_id = $1;
     `
 	if _, err := c.db.ExecContext(ctx, query, repoID); err != nil {
-		logger.LogError(err)
-		return err
+		return fmt.Errorf("failed to delete commits: %w", err)
 	}
 	return nil
 }
@@ -107,8 +103,7 @@ func (c *CommitRepository) GetTopCommitAuthors(ctx context.Context, repoID int64
     `
 	var authors []domain.CommitAuthor
 	if err := c.db.SelectContext(ctx, &authors, query, repoID, limit); err != nil {
-		logger.LogError(err)
-		return nil, err
+		return nil, fmt.Errorf("failed to get top commit authors: %w", err)
 	}
 	return authors, nil
 }
@@ -117,8 +112,7 @@ func (c *CommitRepository) GetTopCommitAuthors(ctx context.Context, repoID int64
 func (c *CommitRepository) BeginTx(ctx context.Context) (*sqlx.Tx, error) {
 	tx, err := c.db.BeginTxx(ctx, nil)
 	if err != nil {
-		logger.LogError(err)
-		return nil, err
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	return tx, nil
 }

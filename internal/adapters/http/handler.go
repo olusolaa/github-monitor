@@ -3,6 +3,7 @@ package http
 import (
 	"encoding/json"
 	"github.com/olusolaa/github-monitor/pkg/errors"
+	"github.com/olusolaa/github-monitor/pkg/logger"
 	"github.com/olusolaa/github-monitor/pkg/pagination"
 	"net/http"
 	"strconv"
@@ -29,10 +30,12 @@ func monitorRepository(repoService services.RepositoryService) http.HandlerFunc 
 
 		err := repoService.AddRepository(owner, name)
 		if err != nil {
+			logger.LogError(err)
 			errors.HandleError(w, err)
 			return
 		}
 
+		logger.LogInfo("Repository monitoring triggered for: " + owner + "/" + name)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]string{"message": "Repository monitoring triggered successfully"})
@@ -46,10 +49,12 @@ func getRepository(repoService services.RepositoryService) http.HandlerFunc {
 
 		repository, err := repoService.GetRepository(r.Context(), repo, owner)
 		if err != nil {
+			logger.LogError(err)
 			errors.HandleError(w, err)
 			return
 		}
 
+		logger.LogInfo("Repository details fetched for: " + owner + "/" + repo)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(repository)
 	}
@@ -62,12 +67,14 @@ func getCommits(commitService services.CommitService) http.HandlerFunc {
 
 		page, pageSize, err := pagination.ParsePaginationParams(r.URL.Query())
 		if err != nil {
+			logger.LogError(err)
 			errors.HandleError(w, err)
 			return
 		}
 
 		commits, pg, err := commitService.GetCommitsByRepositoryName(r.Context(), owner, name, page, pageSize)
 		if err != nil {
+			logger.LogError(err)
 			errors.HandleError(w, err)
 			return
 		}
@@ -77,6 +84,7 @@ func getCommits(commitService services.CommitService) http.HandlerFunc {
 			Data:       commits,
 		}
 
+		logger.LogInfo("Commits fetched for repository: " + owner + "/" + name)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(response)
 	}
@@ -89,6 +97,7 @@ func getTopCommitAuthors(commitService services.CommitService) http.HandlerFunc 
 
 		repoIDInt, err := strconv.ParseInt(repoID, 10, 64)
 		if err != nil {
+			logger.LogError(err)
 			errors.HandleError(w, err)
 			return
 		}
@@ -97,6 +106,7 @@ func getTopCommitAuthors(commitService services.CommitService) http.HandlerFunc 
 		if limitStr != "" {
 			limit, err = strconv.Atoi(limitStr)
 			if err != nil {
+				logger.LogError(err)
 				errors.HandleError(w, err)
 				return
 			}
@@ -104,10 +114,12 @@ func getTopCommitAuthors(commitService services.CommitService) http.HandlerFunc 
 
 		authors, err := commitService.GetTopCommitAuthors(r.Context(), repoIDInt, limit)
 		if err != nil {
+			logger.LogError(err)
 			errors.HandleError(w, err)
 			return
 		}
 
+		logger.LogInfo("Top commit authors fetched for repository ID: " + repoID)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(authors)
 	}
@@ -118,28 +130,35 @@ func resetCollection(commitService services.CommitService) http.HandlerFunc {
 		repoID := chi.URLParam(r, "repo_id")
 		repoIDInt, err := strconv.ParseInt(repoID, 10, 64)
 		if err != nil {
+			logger.LogError(err)
 			errors.HandleError(w, err)
 			return
 		}
 
 		startTimeStr := r.URL.Query().Get("start_time")
 		if startTimeStr == "" {
-			http.Error(w, "start_time query parameter is required", http.StatusBadRequest)
+			errMsg := "start_time query parameter is required"
+			logger.LogWarning(errMsg)
+			http.Error(w, errMsg, http.StatusBadRequest)
 			return
 		}
 
 		startTime, err := time.Parse(time.RFC3339, startTimeStr)
 		if err != nil {
-			http.Error(w, "Invalid start_time format, must be RFC3339", http.StatusBadRequest)
+			errMsg := "Invalid start_time format, must be RFC3339"
+			logger.LogWarning(errMsg)
+			http.Error(w, errMsg, http.StatusBadRequest)
 			return
 		}
 
 		err = commitService.ResetCollection(r.Context(), repoIDInt, startTime)
 		if err != nil {
+			logger.LogError(err)
 			errors.HandleError(w, err)
 			return
 		}
 
+		logger.LogInfo("Collection reset successfully for repository ID: " + repoID)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]string{"message": "Collection reset successfully"})

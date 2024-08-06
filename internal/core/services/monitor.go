@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/olusolaa/github-monitor/internal/core/domain"
+	"github.com/olusolaa/github-monitor/pkg/errors"
 	"time"
 
 	"github.com/olusolaa/github-monitor/pkg/logger"
@@ -77,21 +78,36 @@ func (m *MonitorService) MonitorRepositoryCommits(ctx context.Context, repositor
 	domainCommitsChan := make(chan []domain.Commit)
 	errChan := make(chan error)
 
+	defer func() {
+		close(domainCommitsChan)
+		close(errChan)
+	}()
+
 	go m.gitHubService.FetchCommits(ctx, owner, name, since, "", repositoryID, domainCommitsChan, errChan)
+
+	var encounteredError error
 
 	for {
 		select {
 		case domainCommits, ok := <-domainCommitsChan:
 			if !ok {
-				return nil
+				encounteredError = errors.New("DOMAIN_COMMITS_CHANNEL_CLOSED", "domain commits channel closed unexpectedly", nil, errors.Critical)
+				return encounteredError
 			}
 			if err := m.commitService.SaveCommits(ctx, domainCommits); err != nil {
-				return fmt.Errorf("failed to save commits: %w", err)
+				encounteredError = err
+				return encounteredError
 			}
-		case err := <-errChan:
-			return fmt.Errorf("error fetching commits: %w", err)
+		case err, ok := <-errChan:
+			if !ok {
+				encounteredError = errors.New("ERR_CHANNEL_CLOSED", "error channel closed unexpectedly", nil, errors.Critical)
+			} else if err != nil {
+				encounteredError = err
+			}
+			return encounteredError
 		case <-ctx.Done():
-			return ctx.Err()
+			encounteredError = errors.New("CONTEXT_DONE", "context canceled or timed out", ctx.Err(), errors.Critical)
+			return encounteredError
 		}
 	}
 }

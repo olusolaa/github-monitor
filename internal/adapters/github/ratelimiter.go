@@ -1,6 +1,7 @@
 package github
 
 import (
+	"github.com/olusolaa/github-monitor/pkg/errors"
 	"github.com/olusolaa/github-monitor/pkg/httpclient"
 	"net/http"
 	"strconv"
@@ -33,7 +34,7 @@ func (rl *RateLimiter) RateLimitMiddleware(req *http.Request, next httpclient.HT
 
 	resp, err := next.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, errors.New("HTTP_REQUEST_ERROR", "failed to execute request", err, errors.Critical)
 	}
 
 	rl.updateRateLimit(resp)
@@ -50,6 +51,7 @@ func (rl *RateLimiter) updateRateLimit(resp *http.Response) {
 			rl.remaining = r
 		}
 	}
+
 	if reset := resp.Header.Get("X-RateLimit-Reset"); reset != "" {
 		if r, err := strconv.ParseInt(reset, 10, 64); err == nil {
 			rl.reset = time.Unix(r, 0)

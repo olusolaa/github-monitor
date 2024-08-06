@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"github.com/olusolaa/github-monitor/internal/adapters/postgresdb"
 	"github.com/olusolaa/github-monitor/internal/core/domain"
 	"github.com/olusolaa/github-monitor/pkg/logger"
@@ -81,13 +82,12 @@ func (s *repositoryService) FetchRepository(ctx context.Context, owner, repo str
 	if commitChan != nil {
 		commitChan <- repository.ID
 	}
-	logger.LogInfo("Initialized repository and published event for fetching commits")
+	logger.LogInfo(fmt.Sprintf("Initialized repository and published event for fetching commits for repo: %s/%s", owner, repo))
 	return nil
 }
 
-// GetRepositoryInfo fetches repository information either from the database or GitHub API.
+// GetRepository fetches repository information either from the database or GitHub API.
 func (s *repositoryService) GetRepository(ctx context.Context, repoName, owner string) (*domain.Repository, error) {
-
 	repository, err := s.repoRepo.FindByNameAndOwner(ctx, repoName, owner)
 	if err != nil {
 		logger.LogError(err)
@@ -108,6 +108,7 @@ func (s *repositoryService) UpsertRepository(ctx context.Context, repository *do
 func (s *repositoryService) GetOwnerAndRepoName(ctx context.Context, repoID int64) (string, string, error) {
 	owner, repoName, err := s.repoRepo.GetOwnerAndRepoName(ctx, repoID)
 	if err != nil {
+		logger.LogError(err)
 		return "", "", err
 	}
 	return owner, repoName, nil

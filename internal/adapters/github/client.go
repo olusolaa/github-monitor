@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"fmt"
+	"github.com/olusolaa/github-monitor/pkg/errors"
 	"github.com/olusolaa/github-monitor/pkg/httpclient"
 	"net/http"
 )
@@ -31,9 +32,6 @@ func NewClient(baseURL string, client *httpclient.Client) *Client {
 }
 
 func (c *Client) GetCommits(ctx context.Context, owner, repoName, since, until string, commitsChan chan<- []Commit, errChan chan<- error) {
-	defer close(commitsChan)
-	defer close(errChan)
-
 	reqPath := fmt.Sprintf("/repos/%s/%s/commits", owner, repoName)
 	params := CommitQueryParams{
 		Since:   since,
@@ -44,7 +42,7 @@ func (c *Client) GetCommits(ctx context.Context, owner, repoName, since, until s
 	processPage := func(data interface{}) error {
 		commits, ok := data.(*[]Commit)
 		if !ok {
-			return fmt.Errorf("unexpected type %T for commit data", data)
+			return errors.New("PROCESS_PAGE_ERROR", "unexpected type for commit data", fmt.Errorf("unexpected type %T", data), errors.Critical)
 		}
 
 		select {
@@ -56,11 +54,13 @@ func (c *Client) GetCommits(ctx context.Context, owner, repoName, since, until s
 	}
 
 	out := &[]Commit{}
-	if err := c.paginationManager.FetchAllPages(ctx, reqPath, params, processPage, out); err != nil {
-		select {
-		case errChan <- err:
-		case <-ctx.Done():
-		}
+	fetchErr := c.paginationManager.FetchAllPages(ctx, reqPath, params, processPage, out)
+
+	// Signal completion
+	select {
+	case errChan <- fetchErr:
+	case <-ctx.Done():
+		// Handle context cancellation, don't block
 	}
 }
 
@@ -70,18 +70,18 @@ func (c *Client) GetRepository(ctx context.Context, owner, repo string) (*Reposi
 
 	req, err := c.requestBuilder.BuildRequest(ctx, http.MethodGet, path, nil, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to build request: %w", err)
+		return nil, errors.New("BUILD_REQUEST_ERROR", "failed to build request", err, errors.Critical)
 	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute request: %w", err)
+		return nil, errors.New("EXECUTE_REQUEST_ERROR", "failed to execute request", err, errors.Critical)
 	}
 	defer resp.Body.Close()
 
 	var repository Repository
 	if err := c.responseHandler.HandleResponse(resp, &repository); err != nil {
-		return nil, fmt.Errorf("failed to handle response: %w", err)
+		return nil, errors.New("HANDLE_RESPONSE_ERROR", "failed to handle response", err, errors.Critical)
 	}
 
 	return &repository, nil

@@ -41,7 +41,7 @@ RUN curl -L https://github.com/golang-migrate/migrate/releases/download/${MIGRAT
 RUN chmod +x wait-for-it.sh
 
 # Copy the migrations directory
-COPY --from=builder /app/db/migrations /root/migrations
+COPY --from=builder /app/db/migrations /root/db/migrations
 
 # Copy and set the entrypoint script
 COPY docker-entrypoint.sh /usr/local/bin/

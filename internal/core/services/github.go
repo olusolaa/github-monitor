@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/olusolaa/github-monitor/internal/adapters/github"
 	"github.com/olusolaa/github-monitor/internal/core/domain"
+	"github.com/olusolaa/github-monitor/pkg/logger"
 )
 
 type GitHubService interface {
@@ -13,8 +14,7 @@ type GitHubService interface {
 }
 
 type gitHubService struct {
-	client        *github.Client
-	commitService commitService
+	client *github.Client
 }
 
 func NewGitHubService(client *github.Client) GitHubService {
@@ -24,7 +24,8 @@ func NewGitHubService(client *github.Client) GitHubService {
 func (s *gitHubService) FetchRepository(ctx context.Context, owner, repoName string) (*domain.Repository, error) {
 	apiRepo, err := s.client.GetRepository(ctx, owner, repoName)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch repository info: %w", err)
+		logger.LogError(fmt.Errorf("failed to fetch repository info: %w", err))
+		return nil, err
 	}
 
 	repo := &domain.Repository{
@@ -40,6 +41,7 @@ func (s *gitHubService) FetchRepository(ctx context.Context, owner, repoName str
 		CreatedAt:       apiRepo.CreatedAt,
 		UpdatedAt:       apiRepo.UpdatedAt,
 	}
+	logger.LogInfo(fmt.Sprintf("Repository fetched: %s/%s", owner, repoName))
 	return repo, nil
 }
 
@@ -52,10 +54,13 @@ func (s *gitHubService) FetchCommits(ctx context.Context, owner, repoName, since
 	var encounteredError error
 
 	defer func() {
-		close(commitsChan)
-		close(errChan)
+		close(apiCommitsChan)
+		close(apiErrChan)
+
 		if encounteredError != nil {
 			errChan <- encounteredError
+		} else {
+			errChan <- nil // Indicate completion without errors
 		}
 	}()
 
@@ -63,20 +68,28 @@ func (s *gitHubService) FetchCommits(ctx context.Context, owner, repoName, since
 		select {
 		case apiCommits, ok := <-apiCommitsChan:
 			if !ok {
-				return
+				logger.LogWarning("API commits channel closed unexpectedly")
+			} else {
+				domainCommits := s.convertToDomainCommits(apiCommits, repoID)
+				select {
+				case commitsChan <- domainCommits:
+				case <-ctx.Done():
+					encounteredError = ctx.Err()
+					return
+				}
 			}
-			domainCommits := s.convertToDomainCommits(apiCommits, repoID)
-			select {
-			case commitsChan <- domainCommits:
-			case <-ctx.Done():
-				encounteredError = ctx.Err()
+		case err, ok := <-apiErrChan:
+			if err != nil {
+				encounteredError = fmt.Errorf("error fetching commits: %w", err)
+				logger.LogError(encounteredError)
 				return
+			} else if !ok {
+				logger.LogWarning("API error channel closed unexpectedly")
 			}
-		case err := <-apiErrChan:
-			encounteredError = err
 			return
 		case <-ctx.Done():
 			encounteredError = ctx.Err()
+			logger.LogError(encounteredError)
 			return
 		}
 	}

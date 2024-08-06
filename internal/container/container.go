@@ -122,7 +122,7 @@ func runMigrations(dsn string) error {
 	}
 
 	m, err := migrate.NewWithDatabaseInstance(
-		"file://migrations",
+		"file://db/migrations",
 		"postgres", driver)
 	if err != nil {
 		return err
