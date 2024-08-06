@@ -96,6 +96,8 @@ To set up the project locally, follow these steps:
    ```
 
 3. **Run the setup script:**
+
+   Please update the ./setup.sh file with your github token and run the following command
     ```sh
     ./setup.sh
     ```
