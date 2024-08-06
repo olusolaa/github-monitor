@@ -119,7 +119,7 @@ func (m *MonitorService) SyncRepositoryInfo(ctx context.Context, repositoryID in
 		return err
 	}
 
-	updatedRepository, err := m.gitHubService.FetchRepository(ctx, name, owner)
+	updatedRepository, err := m.gitHubService.FetchRepository(ctx, owner, name)
 	if err != nil {
 		return err
 	}
