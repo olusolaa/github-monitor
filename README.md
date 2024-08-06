@@ -100,7 +100,7 @@ To set up the project locally, follow these steps:
    cd github-monitor
    ```
 
-3. **Run the setup script:**
+3. **Run the setup script:** The .setup.sh script will automate the setup process. Run the following command:
 
     ```sh
     ./setup.sh
