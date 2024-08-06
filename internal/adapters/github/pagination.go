@@ -39,6 +39,7 @@ func (pm *PaginationManager) FetchAllPages(ctx context.Context,
 			p["page"] = fmt.Sprintf("%d", page)
 		case CommitQueryParams:
 			p.Page = page
+			params = p
 		default:
 			fetchErr = errors.New("INVALID_PARAMS_TYPE", "invalid params type", nil, errors.Critical)
 			break

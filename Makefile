@@ -4,7 +4,7 @@ MIGRATE_MAC=migrate.darwin-amd64
 MIGRATE_WINDOWS=migrate.windows-amd64.exe
 MIGRATE_BIN=/usr/local/bin/migrate
 
-DB_URL=postgresql://localhost:5432/github_monitor_db?sslmode=disable
+DB_URL=postgresql://localhost:5432/postgres?sslmode=disable
 MIGRATE_CMD=migrate -path db/migrations -database "$(DB_URL)"
 
 # Install migration tool for Mac
