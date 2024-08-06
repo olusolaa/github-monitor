@@ -164,57 +164,48 @@ func (s *commitService) ResetCollection(ctx context.Context, repoID int64, start
 		logger.LogError(errors.New("GET_OWNER_REPO_NAME_ERROR", "error getting owner and repo name", err, errors.Critical))
 		tx.Rollback()
 		return err
+	} else {
+		if err := tx.Commit(); err != nil {
+			logger.LogError(errors.New("COMMIT_TRANSACTION_ERROR", "error committing transaction", err, errors.Critical))
+			return err
+		}
+		logger.LogInfo(fmt.Sprintf("Collection reset successfully for repository ID: %d", repoID))
 	}
 
 	domainCommitsChan := make(chan []domain.Commit)
 	errChan := make(chan error)
 
-	go func() {
-		defer func() {
-			if domainCommitsChan != nil {
-				close(domainCommitsChan)
-			}
-			if errChan != nil {
-				close(errChan)
-			}
-		}()
-		s.gitHubService.FetchCommits(ctx, owner, name, startTimeStr, "", repoID, domainCommitsChan, errChan)
+	defer func() {
+		close(domainCommitsChan)
+		close(errChan)
 	}()
+
+	go s.gitHubService.FetchCommits(ctx, owner, name, startTimeStr, "", repoID, domainCommitsChan, errChan)
 
 	for {
 		select {
 		case domainCommits, ok := <-domainCommitsChan:
 			if !ok {
-				domainCommitsChan = nil
-			} else {
-				if err := s.SaveCommits(ctx, domainCommits); err != nil {
-					logger.LogError(errors.New("SAVE_COMMITS_ERROR", "error saving commits", err, errors.Critical))
-					tx.Rollback()
-					return err
-				}
+				return errors.New("DOMAIN_COMMITS_CHANNEL_CLOSED", "domain commits channel closed unexpectedly", nil, errors.Critical)
 			}
-		case err := <-errChan:
-			if err != nil {
-				logger.LogError(errors.New("FETCH_COMMITS_ERROR", "error fetching commits", err, errors.Critical))
+			if err := s.SaveCommits(ctx, domainCommits); err != nil {
+				logger.LogError(errors.New("SAVE_COMMITS_ERROR", "error saving commits", err, errors.Critical))
 				tx.Rollback()
 				return err
 			}
+		case err, ok := <-errChan:
+			if !ok {
+				return errors.New("ERR_CHANNEL_CLOSED", "error channel closed unexpectedly", nil, errors.Critical)
+			}
+			if err != nil {
+				logger.LogError(errors.New("FETCH_COMMITS_ERROR", "error fetching commits", err, errors.Critical))
+				tx.Rollback()
+			}
+			return err
 		case <-ctx.Done():
 			logger.LogError(errors.New("CONTEXT_DONE", "context canceled or timed out", ctx.Err(), errors.Critical))
 			tx.Rollback()
 			return ctx.Err()
 		}
-
-		if domainCommitsChan == nil && errChan == nil {
-			break
-		}
 	}
-
-	if err := tx.Commit(); err != nil {
-		logger.LogError(errors.New("COMMIT_TRANSACTION_ERROR", "error committing transaction", err, errors.Critical))
-		return err
-	}
-
-	logger.LogInfo(fmt.Sprintf("Collection reset successfully for repository ID: %d", repoID))
-	return nil
 }
