@@ -115,8 +115,9 @@ The following routes are available in the application:
 
 - **GET /api/repos/{owner}/{repo}** - Get repository details.
 - **GET /api/repos/{owner}/{repo}/commits** - Get commits for a repository.
-- **GET /api/repos/{repo_id}/top-authors** - Get top authors by commit count.
-- **POST /api/repos/{repo_id}/reset-collection** - Reset the collection of a repository.
+- **GET /api/repos/{owner}/{name}/top-authors** - Get top authors by commit count.
+- **POST /api/repos/{owner}/{name}/reset-collection** - Reset the collection of a repository.
+- **POST /api/repos/{owner}/{name}/monitor** - Add a new repository to the monitoring list.
 
 ## Core Logic
 
