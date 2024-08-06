@@ -19,7 +19,7 @@ type CommitRepository interface {
 	GetLatestCommitByRepositoryID(ctx context.Context, repoID int64) (*domain.Commit, error)
 	GetCommitsByRepositoryName(ctx context.Context, owner, name string, page, pageSize int) ([]domain.Commit, int, error)
 	DeleteCommitsByRepositoryID(ctx context.Context, repoID int64) error
-	GetTopCommitAuthors(ctx context.Context, repoID int64, limit int) ([]domain.CommitAuthor, error)
+	GetTopCommitAuthors(ctx context.Context, owner, name string, limit int) ([]domain.CommitAuthor, error)
 	BeginTx(ctx context.Context) (*sqlx.Tx, error)
 }
 
@@ -101,17 +101,18 @@ func (c commitRepository) DeleteCommitsByRepositoryID(ctx context.Context, repoI
 }
 
 // GetTopCommitAuthors retrieves the top N authors by commit count for a specified repository.
-func (c commitRepository) GetTopCommitAuthors(ctx context.Context, repoID int64, limit int) ([]domain.CommitAuthor, error) {
+func (c commitRepository) GetTopCommitAuthors(ctx context.Context, owner, name string, limit int) ([]domain.CommitAuthor, error) {
 	query := `
-        SELECT author_name, author_email, COUNT(*) AS commit_count
-        FROM commits
-        WHERE repository_id = $1
-        GROUP BY author_name, author_email
+        SELECT c.author_name, c.author_email, COUNT(*) AS commit_count
+        FROM commits c
+        INNER JOIN repositories r ON c.repository_id = r.id
+        WHERE r.name = $1 AND r.owner = $2
+        GROUP BY c.author_name, c.author_email
         ORDER BY commit_count DESC
-        LIMIT $2;
+        LIMIT $3;
     `
 	var authors []domain.CommitAuthor
-	if err := c.db.SelectContext(ctx, &authors, query, repoID, limit); err != nil {
+	if err := c.db.SelectContext(ctx, &authors, query, name, owner, limit); err != nil {
 		return nil, fmt.Errorf("failed to get top commit authors: %w", err)
 	}
 	return authors, nil

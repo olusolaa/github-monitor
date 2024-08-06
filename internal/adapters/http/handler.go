@@ -17,8 +17,8 @@ func RegisterRoutes(r chi.Router, repoService services.RepositoryService, commit
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/repos/{owner}/{repo}", getRepository(repoService))
 		r.Get("/repos/{owner}/{name}/commits", getCommits(commitService))
-		r.Get("/repos/{repo_id}/top-authors", getTopCommitAuthors(commitService))
-		r.Post("/repos/{repo_id}/reset-collection", resetCollection(commitService))
+		r.Get("/repos/{owner}/{name}/top-authors", getTopCommitAuthors(commitService))
+		r.Post("/repos/{owner}/{name}/reset-collection", resetCollection(commitService))
 		r.Post("/repos/{owner}/{name}/monitor", monitorRepository(repoService))
 	})
 }
@@ -92,17 +92,12 @@ func getCommits(commitService services.CommitService) http.HandlerFunc {
 
 func getTopCommitAuthors(commitService services.CommitService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		repoID := chi.URLParam(r, "repo_id")
+		name := chi.URLParam(r, "name")
+		owner := chi.URLParam(r, "owner")
 		limitStr := r.URL.Query().Get("limit")
 
-		repoIDInt, err := strconv.ParseInt(repoID, 10, 64)
-		if err != nil {
-			logger.LogError(err)
-			errors.HandleError(w, err)
-			return
-		}
-
 		limit := 10 // Default limit
+		var err error
 		if limitStr != "" {
 			limit, err = strconv.Atoi(limitStr)
 			if err != nil {
@@ -112,14 +107,14 @@ func getTopCommitAuthors(commitService services.CommitService) http.HandlerFunc 
 			}
 		}
 
-		authors, err := commitService.GetTopCommitAuthors(r.Context(), repoIDInt, limit)
+		authors, err := commitService.GetTopCommitAuthors(r.Context(), owner, name, limit)
 		if err != nil {
 			logger.LogError(err)
 			errors.HandleError(w, err)
 			return
 		}
 
-		logger.LogInfo("Top commit authors fetched for repository ID: " + repoID)
+		logger.LogInfo("Top commit authors fetched for repository name: " + name)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(authors)
 	}
@@ -127,13 +122,8 @@ func getTopCommitAuthors(commitService services.CommitService) http.HandlerFunc 
 
 func resetCollection(commitService services.CommitService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		repoID := chi.URLParam(r, "repo_id")
-		repoIDInt, err := strconv.ParseInt(repoID, 10, 64)
-		if err != nil {
-			logger.LogError(err)
-			errors.HandleError(w, err)
-			return
-		}
+		name := chi.URLParam(r, "name")
+		owner := chi.URLParam(r, "owner")
 
 		startTimeStr := r.URL.Query().Get("start_time")
 		if startTimeStr == "" {
@@ -151,14 +141,14 @@ func resetCollection(commitService services.CommitService) http.HandlerFunc {
 			return
 		}
 
-		err = commitService.ResetCollection(r.Context(), repoIDInt, startTime)
+		err = commitService.ResetCollection(r.Context(), owner, name, startTime)
 		if err != nil {
 			logger.LogError(err)
 			errors.HandleError(w, err)
 			return
 		}
 
-		logger.LogInfo("Collection reset successfully for repository ID: " + repoID)
+		logger.LogInfo("Collection reset successfully for repository name: " + name)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]string{"message": "Collection reset successfully"})

@@ -16,8 +16,8 @@ type CommitService interface {
 	SaveCommits(ctx context.Context, commits []domain.Commit) error
 	GetLatestCommit(ctx context.Context, repoID int64) (*domain.Commit, error)
 	GetCommitsByRepositoryName(ctx context.Context, owner, name string, page, pageSize int) ([]domain.Commit, *pagination.Pagination, error)
-	ResetCollection(ctx context.Context, repoID int64, startTime time.Time) error
-	GetTopCommitAuthors(ctx context.Context, repoID int64, limit int) ([]domain.CommitAuthor, error)
+	ResetCollection(ctx context.Context, owner, name string, startTime time.Time) error
+	GetTopCommitAuthors(ctx context.Context, owner, name string, limit int) ([]domain.CommitAuthor, error)
 	CommitManager(monitoringChan chan int64, startDate, endDate string)
 	ProcessCommits(repoID int64, monitoringChan chan int64, startDate, endDate string)
 }
@@ -129,17 +129,17 @@ func (s *commitService) GetCommitsByRepositoryName(ctx context.Context, owner, n
 	return commits, pg, nil
 }
 
-func (s *commitService) GetTopCommitAuthors(ctx context.Context, repoID int64, limit int) ([]domain.CommitAuthor, error) {
-	authors, err := s.commitRepo.GetTopCommitAuthors(ctx, repoID, limit)
+func (s *commitService) GetTopCommitAuthors(ctx context.Context, owner, name string, limit int) ([]domain.CommitAuthor, error) {
+	authors, err := s.commitRepo.GetTopCommitAuthors(ctx, owner, name, limit)
 	if err != nil {
 		logger.LogError(errors.New("GET_TOP_AUTHORS_ERROR", "error retrieving top commit authors", err, errors.Critical))
 		return nil, err
 	}
-	logger.LogInfo(fmt.Sprintf("Fetched top commit authors for repo ID: %d", repoID))
+	logger.LogInfo(fmt.Sprintf("Fetched top commit authors for repo ID: %s", name))
 	return authors, nil
 }
 
-func (s *commitService) ResetCollection(ctx context.Context, repoID int64, startTime time.Time) error {
+func (s *commitService) ResetCollection(ctx context.Context, owner, name string, startTime time.Time) error {
 	tx, err := s.commitRepo.BeginTx(ctx)
 	if err != nil {
 		logger.LogError(errors.New("BEGIN_TRANSACTION_ERROR", "error beginning transaction", err, errors.Critical))
@@ -153,14 +153,15 @@ func (s *commitService) ResetCollection(ctx context.Context, repoID int64, start
 		}
 	}()
 
-	if err := s.commitRepo.DeleteCommitsByRepositoryID(ctx, repoID); err != nil {
+	rep, err := s.repositoryService.GetRepository(ctx, name, owner)
+	if err != nil {
 		logger.LogError(errors.New("DELETE_COMMITS_ERROR", "error deleting commits", err, errors.Critical))
 		tx.Rollback()
 		return err
 	}
 
 	startTimeStr := startTime.Format(time.RFC3339)
-	owner, name, err := s.repositoryService.GetOwnerAndRepoName(ctx, repoID)
+	err = s.commitRepo.DeleteCommitsByRepositoryID(ctx, rep.ID)
 	if err != nil {
 		logger.LogError(errors.New("GET_OWNER_REPO_NAME_ERROR", "error getting owner and repo name", err, errors.Critical))
 		tx.Rollback()
@@ -170,7 +171,7 @@ func (s *commitService) ResetCollection(ctx context.Context, repoID int64, start
 			logger.LogError(errors.New("COMMIT_TRANSACTION_ERROR", "error committing transaction", err, errors.Critical))
 			return err
 		}
-		logger.LogInfo(fmt.Sprintf("Collection reset successfully for repository ID: %d", repoID))
+		logger.LogInfo(fmt.Sprintf("Collection reset successfully for repository name: %s", name))
 	}
 
 	domainCommitsChan := make(chan []domain.Commit)
@@ -181,7 +182,7 @@ func (s *commitService) ResetCollection(ctx context.Context, repoID int64, start
 		close(errChan)
 	}()
 
-	go s.gitHubService.FetchCommits(ctx, owner, name, startTimeStr, "", repoID, domainCommitsChan, errChan)
+	go s.gitHubService.FetchCommits(ctx, rep.Owner, rep.Name, startTimeStr, "", rep.ID, domainCommitsChan, errChan)
 
 	for {
 		select {
