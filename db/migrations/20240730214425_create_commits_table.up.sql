@@ -10,3 +10,9 @@ CREATE TABLE IF NOT EXISTS commits (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     FOREIGN KEY (repository_id) REFERENCES repositories(id)
     );
+
+-- Index on repository_id for efficient joins and lookups
+CREATE INDEX IF NOT EXISTS idx_commits_repository_id ON commits(repository_id);
+
+-- Index on commit_date for efficient sorting and filtering by date
+CREATE INDEX IF NOT EXISTS idx_commits_commit_date ON commits(commit_date);

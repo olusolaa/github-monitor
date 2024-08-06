@@ -13,3 +13,9 @@ CREATE TABLE IF NOT EXISTS repositories (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE(name, owner)
     );
+
+-- Create an index for quick lookup by name and owner
+CREATE UNIQUE INDEX IF NOT EXISTS idx_repositories_name_owner ON repositories(name, owner);
+
+-- Create an index for quick lookup by owner
+CREATE INDEX IF NOT EXISTS idx_repositories_owner ON repositories(owner);
