@@ -27,43 +27,42 @@ db/
         └── 20240730214425_create_commits_table.up.sql
 internal/
   └── adapters/
-        ├── cache/
-        ├── consumers/
-              ├── commit_consumer.go
-              └── monitoring_consumer.go
         ├── github/
               ├── client.go
+              ├── pagination.go
+              ├── ratelimiter.go
               └── types.go
-        └── http/
+        ├── http/
               ├── handler.go
               └── middleware.go
-  └── postgresdb/
-        ├── commit.go
-        └── repository.go
-  └── queue/
-        ├── connection_manager.go
-        ├── message_consumer.go
-        └── message_publisher.go
+        ├── postgresdb/
+              ├── commit.go
+              └── repository.go
+        ├── queue/
+              ├── connection_manager.go
+              ├── message_consumer.go
+              └── message_publisher.go
   └── container/
         └── container.go
   └── core/
         ├── domain/
               ├── commit.go
               └── repository.go
-        ├── initializer/
-              └── repository_initializer.go
         ├── services/
               ├── commit.go
               ├── github.go
               ├── monitor.go
               └── repository.go
-        └── scheduler/
+        ├── scheduler/
               └── scheduler.go
 pkg/
   └── errors/
         └── errors.go
   └── httpclient/
-        └── client.go
+        ├── client.go
+        ├── middleware.go
+        ├── request.go
+        └── response.go
   └── logger/
         └── logger.go
   └── pagination/
@@ -71,9 +70,17 @@ pkg/
   └── utils/
         └── util.go
 test/
-  └── .env
+  ├── commit_test.go
+  └── repository_test.go
+.env
+docker-compose.yml
+docker-entrypoint.sh
+Dockerfile
 go.mod
 Makefile
+README.md
+setup.sh
+wait-for-it.sh
 ```
 
 ## Installation
@@ -101,12 +108,21 @@ To set up the project locally, follow these steps:
     ```sh
     ./setup.sh
     ```
-This script will:
+During the script execution, you will encounter the following steps:
 
-- Check for Docker installation and start Docker if necessary.
-- Set up environment variables from the .env file.
-- Build and start the Docker containers for the application, PostgreSQL, and RabbitMQ.
-
+- **Docker Installation and Startup**:
+  The script checks for Docker. If Docker is not installed, it will install Docker (on Linux) or prompt you to install Docker Desktop (on Mac and Windows). It then ensures Docker is running.
+- **Environment Variable Setup**:
+  The script sets up necessary environment variables. During this process, you will be prompted for:
+    - GitHub Token `GITHUB_TOKEN`: **Required**. Enter a valid GitHub token for API access. The script will not continue without it.
+    - Optional Configurations:
+         - Start Date `START_DATE`: When to start pulling commits. Format: `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SSZ`
+         - End Date `END_DATE`: When to stop pulling commits. Same format as `START_DATE`.
+         - Repository Owner `DEFAULT_OWNER`: The GitHub username of the repository owner.
+         - Repository Name `DEFAULT_REPO`: The name of the repository to monitor.
+         - Poll Interval `POLL_INTERVAL`: Interval in seconds to check for new commits.
+- **Starting Docker Containers:**:
+  The script will build and start Docker containers for the application and PostgreSQL.
 
 
 ## API Routes
