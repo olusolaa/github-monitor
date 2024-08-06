@@ -9,8 +9,6 @@ GitHub Monitor is a service designed to monitor GitHub repositories, track commi
 - [Installation](#installation)
 - [API Routes](#api-routes)
 - [Core Logic](#core-logic)
-- [Contribution](#contribution)
-- [License](#license)
 
 ## Folder Structure
 
@@ -104,18 +102,24 @@ To set up the project locally, follow these steps:
 
 3. **Run the setup script:**
 
-   Please update the ./setup.sh file with your github token and run the following command
     ```sh
     ./setup.sh
     ```
+
+- **Note**: If you encounter permission issues, you may need to grant execute permissions to the script. You can do this by running:
+
+    ```sh
+    chmod +x setup.sh
+    ```
+  
 During the script execution, you will encounter the following steps:
 
 - **Docker Installation and Startup**:
   The script checks for Docker. If Docker is not installed, it will install Docker (on Linux) or prompt you to install Docker Desktop (on Mac and Windows). It then ensures Docker is running.
 - **Environment Variable Setup**:
   The script sets up necessary environment variables. During this process, you will be prompted for:
-    - GitHub Token `GITHUB_TOKEN`: **Required**. Enter a valid GitHub token for API access. The script will not continue without it.
-    - Optional Configurations:
+    - **GitHub Token** `GITHUB_TOKEN`: **Required**. Enter a valid GitHub token for API access. The script will not continue without it.
+    - **Optional Configurations**:
          - Start Date `START_DATE`: When to start pulling commits. Format: `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SSZ`
          - End Date `END_DATE`: When to stop pulling commits. Same format as `START_DATE`.
          - Repository Owner `DEFAULT_OWNER`: The GitHub username of the repository owner.
