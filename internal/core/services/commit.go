@@ -19,16 +19,17 @@ type CommitService interface {
 	ResetCollection(ctx context.Context, repoID int64, startTime time.Time) error
 	GetTopCommitAuthors(ctx context.Context, repoID int64, limit int) ([]domain.CommitAuthor, error)
 	CommitManager(monitoringChan chan int64, startDate, endDate string)
+	ProcessCommits(repoID int64, monitoringChan chan int64, startDate, endDate string)
 }
 
 type commitService struct {
 	gitHubService     GitHubService
 	repositoryService RepositoryService
-	commitRepo        *postgresdb.CommitRepository
+	commitRepo        postgresdb.CommitRepository
 	commitChan        chan int64
 }
 
-func NewCommitService(gitHubService GitHubService, repositoryService RepositoryService, commitRepo *postgresdb.CommitRepository, commitChan chan int64) CommitService {
+func NewCommitService(gitHubService GitHubService, repositoryService RepositoryService, commitRepo postgresdb.CommitRepository, commitChan chan int64) CommitService {
 	return &commitService{
 		gitHubService:     gitHubService,
 		repositoryService: repositoryService,
@@ -39,11 +40,11 @@ func NewCommitService(gitHubService GitHubService, repositoryService RepositoryS
 
 func (cs *commitService) CommitManager(monitoringChan chan int64, startDate, endDate string) {
 	for repoID := range cs.commitChan {
-		go cs.processCommits(repoID, monitoringChan, startDate, endDate)
+		go cs.ProcessCommits(repoID, monitoringChan, startDate, endDate)
 	}
 }
 
-func (cs *commitService) processCommits(repoID int64, monitoringChan chan int64, startDate, endDate string) {
+func (cs *commitService) ProcessCommits(repoID int64, monitoringChan chan int64, startDate, endDate string) {
 	ctx := context.Background()
 
 	owner, name, err := cs.repositoryService.GetOwnerAndRepoName(ctx, repoID)

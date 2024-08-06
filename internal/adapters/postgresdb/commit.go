@@ -10,16 +10,25 @@ import (
 	"github.com/olusolaa/github-monitor/pkg/pagination"
 )
 
-type CommitRepository struct {
+type commitRepository struct {
 	db *sqlx.DB
 }
 
-func NewCommitRepository(db *sqlx.DB) *CommitRepository {
-	return &CommitRepository{db: db}
+type CommitRepository interface {
+	Save(ctx context.Context, commits []domain.Commit) error
+	GetLatestCommitByRepositoryID(ctx context.Context, repoID int64) (*domain.Commit, error)
+	GetCommitsByRepositoryName(ctx context.Context, owner, name string, page, pageSize int) ([]domain.Commit, int, error)
+	DeleteCommitsByRepositoryID(ctx context.Context, repoID int64) error
+	GetTopCommitAuthors(ctx context.Context, repoID int64, limit int) ([]domain.CommitAuthor, error)
+	BeginTx(ctx context.Context) (*sqlx.Tx, error)
+}
+
+func NewCommitRepository(db *sqlx.DB) CommitRepository {
+	return &commitRepository{db: db}
 }
 
 // Save inserts new commits into the database. Commits with existing hashes are ignored.
-func (c *CommitRepository) Save(ctx context.Context, commits []domain.Commit) error {
+func (c commitRepository) Save(ctx context.Context, commits []domain.Commit) error {
 	query := `
         INSERT INTO commits (repository_id, hash, message, author_name, author_email, commit_date, url)
         VALUES (:repository_id, :hash, :message, :author_name, :author_email, :commit_date, :url)
@@ -33,7 +42,7 @@ func (c *CommitRepository) Save(ctx context.Context, commits []domain.Commit) er
 }
 
 // GetLatestCommitByRepositoryID retrieves the most recent commit for a specified repository.
-func (c *CommitRepository) GetLatestCommitByRepositoryID(ctx context.Context, repoID int64) (*domain.Commit, error) {
+func (c commitRepository) GetLatestCommitByRepositoryID(ctx context.Context, repoID int64) (*domain.Commit, error) {
 	query := `
         SELECT id, repository_id, hash, message, author_name, author_email, commit_date, url
         FROM commits
@@ -51,7 +60,7 @@ func (c *CommitRepository) GetLatestCommitByRepositoryID(ctx context.Context, re
 	return &commit, nil
 }
 
-func (c *CommitRepository) GetCommitsByRepositoryName(ctx context.Context, owner, name string, page, pageSize int) ([]domain.Commit, int, error) {
+func (c commitRepository) GetCommitsByRepositoryName(ctx context.Context, owner, name string, page, pageSize int) ([]domain.Commit, int, error) {
 	query := `
         SELECT commits.id, commits.repository_id, commits.hash, commits.message, commits.author_name, 
                commits.author_email, commits.commit_date, commits.url
@@ -80,7 +89,7 @@ func (c *CommitRepository) GetCommitsByRepositoryName(ctx context.Context, owner
 }
 
 // DeleteCommitsByRepositoryID deletes all commits for a specified repository.
-func (c *CommitRepository) DeleteCommitsByRepositoryID(ctx context.Context, repoID int64) error {
+func (c commitRepository) DeleteCommitsByRepositoryID(ctx context.Context, repoID int64) error {
 	query := `
         DELETE FROM commits
         WHERE repository_id = $1;
@@ -92,7 +101,7 @@ func (c *CommitRepository) DeleteCommitsByRepositoryID(ctx context.Context, repo
 }
 
 // GetTopCommitAuthors retrieves the top N authors by commit count for a specified repository.
-func (c *CommitRepository) GetTopCommitAuthors(ctx context.Context, repoID int64, limit int) ([]domain.CommitAuthor, error) {
+func (c commitRepository) GetTopCommitAuthors(ctx context.Context, repoID int64, limit int) ([]domain.CommitAuthor, error) {
 	query := `
         SELECT author_name, author_email, COUNT(*) AS commit_count
         FROM commits
@@ -109,7 +118,7 @@ func (c *CommitRepository) GetTopCommitAuthors(ctx context.Context, repoID int64
 }
 
 // BeginTx starts a new database transaction.
-func (c *CommitRepository) BeginTx(ctx context.Context) (*sqlx.Tx, error) {
+func (c commitRepository) BeginTx(ctx context.Context) (*sqlx.Tx, error) {
 	tx, err := c.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
