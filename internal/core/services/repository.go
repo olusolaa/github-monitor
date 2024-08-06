@@ -14,6 +14,7 @@ type RepositoryService interface {
 	UpsertRepository(ctx context.Context, repository *domain.Repository) error
 	AddRepository(owner, repo string) error
 	FetchRepository(ctx context.Context, owner, repo string, commitChan chan int64) error
+	RepositoryManager(commitChan chan int64)
 }
 
 type RepoRequest struct {
@@ -24,15 +25,15 @@ type RepoRequest struct {
 
 type repositoryService struct {
 	ghService GitHubService
-	repoRepo  *postgresdb.RepositoryRepository
+	repoRepo  postgresdb.RepositoryRepository
 	repoChan  chan RepoRequest
 }
 
-func NewRepositoryService(ghService GitHubService, repoRepo *postgresdb.RepositoryRepository, commitChan chan int64) RepositoryService {
+func NewRepositoryService(ghService GitHubService, repoRepo postgresdb.RepositoryRepository, repoChan chan RepoRequest, commitChan chan int64) RepositoryService {
 	s := &repositoryService{
 		ghService: ghService,
 		repoRepo:  repoRepo,
-		repoChan:  make(chan RepoRequest, 10), // Buffered channel for concurrent requests
+		repoChan:  repoChan,
 	}
 	go s.RepositoryManager(commitChan) // Start the manager goroutine with the commitChan
 	return s

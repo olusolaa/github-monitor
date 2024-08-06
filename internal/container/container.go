@@ -53,7 +53,8 @@ func NewContainer(cfg *config.Config) *Container {
 	commitChan := make(chan int64, 100)     // Initialize commitChan with a buffer size
 	monitoringChan := make(chan int64, 100) // Initialize monitoringChan with a buffer size
 
-	repoService := services.NewRepositoryService(githubService, repoRepo, commitChan)
+	repoChan := make(chan services.RepoRequest, 10) // Buffered channel for concurrent requests
+	repoService := services.NewRepositoryService(githubService, repoRepo, repoChan, commitChan)
 	commitService := services.NewCommitService(githubService, repoService, commitRepo, commitChan)
 	monitorService := services.NewMonitorService(repoService, commitService, githubService, cfg.MaxRetries, cfg.InitialBackoff)
 	schedulerService := scheduler.NewScheduler(monitorService, cfg)

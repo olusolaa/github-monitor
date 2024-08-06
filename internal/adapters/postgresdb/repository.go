@@ -10,16 +10,23 @@ import (
 	"time"
 )
 
-type RepositoryRepository struct {
+type repositoryRepository struct {
 	db *sqlx.DB
 }
 
-func NewRepositoryRepository(db *sqlx.DB) *RepositoryRepository {
-	return &RepositoryRepository{db: db}
+type RepositoryRepository interface {
+	Upsert(ctx context.Context, repository *domain.Repository) error
+	FindByNameAndOwner(ctx context.Context, name, owner string) (*domain.Repository, error)
+	GetOwnerAndRepoName(ctx context.Context, repoID int64) (string, string, error)
+	Update(ctx context.Context, repo *domain.Repository) error
+}
+
+func NewRepositoryRepository(db *sqlx.DB) RepositoryRepository {
+	return &repositoryRepository{db: db}
 }
 
 // Upsert inserts or updates a repository record in the database.
-func (r *RepositoryRepository) Upsert(ctx context.Context, repository *domain.Repository) error {
+func (r *repositoryRepository) Upsert(ctx context.Context, repository *domain.Repository) error {
 	query := `
         INSERT INTO repositories (name, owner, description, url, language, forks_count, stargazers_count, open_issues_count, watchers_count, created_at, updated_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
@@ -57,7 +64,7 @@ func (r *RepositoryRepository) Upsert(ctx context.Context, repository *domain.Re
 }
 
 // FindByNameAndOwner retrieves a repository by its name and owner.
-func (r *RepositoryRepository) FindByNameAndOwner(ctx context.Context, name, owner string) (*domain.Repository, error) {
+func (r repositoryRepository) FindByNameAndOwner(ctx context.Context, name, owner string) (*domain.Repository, error) {
 	query := `SELECT id, name, owner, description, url, language, forks_count, stargazers_count, open_issues_count, watchers_count, created_at, updated_at FROM repositories WHERE name = $1 AND owner = $2`
 	var repository domain.Repository
 	err := r.db.GetContext(ctx, &repository, query, name, owner)
@@ -71,7 +78,7 @@ func (r *RepositoryRepository) FindByNameAndOwner(ctx context.Context, name, own
 }
 
 // GetOwnerAndRepoName retrieves the owner and repository name by repository ID.
-func (r *RepositoryRepository) GetOwnerAndRepoName(ctx context.Context, repoID int64) (string, string, error) {
+func (r repositoryRepository) GetOwnerAndRepoName(ctx context.Context, repoID int64) (string, string, error) {
 	query := `SELECT owner, name FROM repositories WHERE id = $1`
 	var owner, name string
 	err := r.db.QueryRowContext(ctx, query, repoID).Scan(&owner, &name)
@@ -85,7 +92,7 @@ func (r *RepositoryRepository) GetOwnerAndRepoName(ctx context.Context, repoID i
 }
 
 // Update updates the repository record in the database.
-func (r *RepositoryRepository) Update(ctx context.Context, repo *domain.Repository) error {
+func (r repositoryRepository) Update(ctx context.Context, repo *domain.Repository) error {
 	query := `UPDATE repositories SET
         forks_count = $1,
         stargazers_count = $2,
