@@ -1,4 +1,4 @@
-package github
+package pagination
 
 import (
 	"context"
@@ -9,39 +9,34 @@ import (
 	"strings"
 )
 
-// PaginationManager manages paginated API requests.
-type PaginationManager struct {
+// Manager manages paginated API requests.
+type Manager struct {
 	requestBuilder  *httpclient.RequestBuilder
 	requestExecutor *httpclient.Client
 	responseHandler *httpclient.ResponseHandler
 }
 
-// NewPaginationManager creates a new instance of PaginationManager.
-func NewPaginationManager(rb *httpclient.RequestBuilder, re *httpclient.Client, rh *httpclient.ResponseHandler) *PaginationManager {
-	return &PaginationManager{
+// NewManager creates a new instance of PaginationManager.
+func NewManager(rb *httpclient.RequestBuilder, re *httpclient.Client, rh *httpclient.ResponseHandler) *Manager {
+	return &Manager{
 		requestBuilder:  rb,
 		requestExecutor: re,
 		responseHandler: rh,
 	}
 }
 
-// FetchAllPages fetches all pages of a paginated API response and processes each page's data.
-func (pm *PaginationManager) FetchAllPages(ctx context.Context,
+func (pm *Manager) FetchAllPages(
+	ctx context.Context,
 	path string,
-	params interface{},
+	strategy Strategy,
 	processPage func(interface{}) error,
 	out interface{}) error {
 	var fetchErr error
 
 	for page := 1; ; page++ {
-		switch p := params.(type) {
-		case map[string]string:
-			p["page"] = fmt.Sprintf("%d", page)
-		case CommitQueryParams:
-			p.Page = page
-			params = p
-		default:
-			fetchErr = errors.New("INVALID_PARAMS_TYPE", "invalid params type", nil, errors.Critical)
+		params, err := strategy.UpdateParams(page)
+		if err != nil {
+			fetchErr = err
 			break
 		}
 
@@ -86,7 +81,7 @@ func (pm *PaginationManager) FetchAllPages(ctx context.Context,
 }
 
 // HasNextPage checks if there is a next page based on the Link header.
-func (pm *PaginationManager) HasNextPage(resp *http.Response) bool {
+func (pm *Manager) HasNextPage(resp *http.Response) bool {
 	linkHeader := resp.Header.Get("Link")
 	if linkHeader == "" {
 		// No Link header found, assuming no more pages
@@ -97,7 +92,7 @@ func (pm *PaginationManager) HasNextPage(resp *http.Response) bool {
 }
 
 // parseLinkHeader parses the Link header and returns the URL for the given relation (rel).
-func (pm *PaginationManager) parseLinkHeader(header, rel string) string {
+func (pm *Manager) parseLinkHeader(header, rel string) string {
 	links := strings.Split(header, ",")
 	for _, link := range links {
 		parts := strings.Split(link, ";")

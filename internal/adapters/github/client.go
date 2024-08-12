@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"fmt"
+	"github.com/olusolaa/github-monitor/internal/adapters/github/pagination"
 	"github.com/olusolaa/github-monitor/pkg/errors"
 	"github.com/olusolaa/github-monitor/pkg/httpclient"
 	"net/http"
@@ -13,7 +14,7 @@ type Client struct {
 	httpClient        *httpclient.Client
 	requestBuilder    *httpclient.RequestBuilder
 	responseHandler   *httpclient.ResponseHandler
-	paginationManager *PaginationManager
+	paginationManager *pagination.Manager
 }
 
 // NewClient creates a new GitHub API client with custom HTTP client settings.
@@ -21,7 +22,7 @@ func NewClient(baseURL string, client *httpclient.Client) *Client {
 	customClient := client
 	requestBuilder := httpclient.NewRequestBuilder(baseURL)
 	responseHandler := httpclient.NewResponseHandler()
-	paginationManager := NewPaginationManager(requestBuilder, customClient, responseHandler)
+	paginationManager := pagination.NewManager(requestBuilder, customClient, responseHandler)
 
 	return &Client{
 		httpClient:        customClient,
@@ -33,11 +34,7 @@ func NewClient(baseURL string, client *httpclient.Client) *Client {
 
 func (c *Client) GetCommits(ctx context.Context, owner, repoName, since, until string, commitsChan chan<- []Commit, errChan chan<- error) {
 	reqPath := fmt.Sprintf("/repos/%s/%s/commits", owner, repoName)
-	params := CommitQueryParams{
-		Since:   since,
-		Until:   until,
-		PerPage: 100,
-	}
+	strategy := pagination.NewCommitStrategy(since, until)
 
 	processPage := func(data interface{}) error {
 		commits, ok := data.(*[]Commit)
@@ -54,7 +51,7 @@ func (c *Client) GetCommits(ctx context.Context, owner, repoName, since, until s
 	}
 
 	out := &[]Commit{}
-	fetchErr := c.paginationManager.FetchAllPages(ctx, reqPath, params, processPage, out)
+	fetchErr := c.paginationManager.FetchAllPages(ctx, reqPath, strategy, processPage, out)
 
 	// Signal completion
 	select {

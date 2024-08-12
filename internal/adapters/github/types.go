@@ -27,14 +27,6 @@ type Commit struct {
 	} `json:"commit"`
 }
 
-// CommitQueryParams contains query parameters for fetching commits
-type CommitQueryParams struct {
-	Since   string `url:"since"`
-	Until   string `url:"until"`
-	Page    int    `url:"page"`
-	PerPage int    `url:"per_page"`
-}
-
 type Repository struct {
 	ID              int64     `db:"id" json:"-"`
 	Owner           string    `db:"owner" json:"-"`
